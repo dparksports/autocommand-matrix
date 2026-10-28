@@ -660,13 +660,14 @@ namespace AutoCommand.Matrix
         // Per-column rendering: log-fading wake, bloomed lead
         // ------------------------------------------------------------------
 
-        /// <summary>Logarithmic wake fade — brightness holds high, then
-        /// plunges (≈73% at half-life). Capped below the head's full
-        /// strength: the lead is always the brightest thing in its column.</summary>
+        /// <summary>Logarithmic wake fade — the wake STARTS at the lead's
+        /// brightness (same head color, alpha capped a hair under full so
+        /// the lead is still strictly brightest) and decays on a curve that
+        /// holds high, then plunges (≈73% at half-life).</summary>
         private double WakeAlpha(double age, double lifetime)
         {
             double f = Math.Log(1 + _wakeCurveK * (lifetime - age)) * WakeDenom;
-            return Math.Clamp(f, 0, 1) * (232.0 / 256.0);
+            return Math.Clamp(f, 0, 1) * (248.0 / 256.0);
         }
 
         /// <summary>The column's pixel x this frame: its slot plus any
@@ -702,7 +703,11 @@ namespace AutoCommand.Matrix
                     col.Wake.RemoveAt(i);
                     continue;
                 }
-                var set = w.Rx ? _atlas.Rx : col.Blocked ? _atlas.Blocked : _atlas.Trail;
+                // The wake starts AT THE LEAD'S BRIGHTNESS — head-colored
+                // glyphs fading as subsequent characters — over the identical
+                // (dim) backdrop glyph etched beneath, so the completed fade
+                // resolves into a background character.
+                var set = w.Rx ? _atlas.Rx : col.Blocked ? _atlas.BlockedHead : _atlas.Head;
                 ClearCell(dstBase, stride, xNow, y, _atlas.CellW, _atlas.CellH);
                 if (xNow >= 0 && xNow + _atlas.CellW <= _w)
                     BlitClipped(dstBase, stride, set[w.Glyph], _atlas.CellW, _atlas.CellH,

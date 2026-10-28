@@ -23,7 +23,7 @@ namespace AutoCommand.Matrix
         private readonly MainWindow _window;
         private IntPtr _hIcon = IntPtr.Zero;
         private readonly WinForms.ToolStripMenuItem _dockLeft, _dockRight, _dockFull, _dockManual;
-        private readonly WinForms.ToolStripMenuItem _clickThroughItem, _labelsItem, _rxItem;
+        private readonly WinForms.ToolStripMenuItem _clickThroughItem, _labelsItem, _rxItem, _desktopItem;
         private DateTime _lastBalloonUtc = DateTime.MinValue;
 
         public TrayIcon(Func<MatrixRainConfig> cfg, MainWindow window)
@@ -57,6 +57,9 @@ namespace AutoCommand.Matrix
             _clickThroughItem = Item("Click-through", () => ToggleProp(c => c.ClickThrough = !c.ClickThrough));
             _labelsItem = Item("PID labels", () => ToggleProp(c => c.ShowLabels = !c.ShowLabels));
             _rxItem = Item("Rain on receives too", () => ToggleProp(c => c.RxMode = !c.RxMode));
+            _desktopItem = Item("Over the desktop only", () => ToggleProp(c =>
+                c.Surface = c.Surface == "desktop" ? "overlay" : "desktop"));
+            menu.Items.Add(_desktopItem);
             menu.Items.Add(_clickThroughItem);
             menu.Items.Add(_labelsItem);
             menu.Items.Add(_rxItem);
@@ -133,6 +136,7 @@ namespace AutoCommand.Matrix
             _clickThroughItem.Checked = cfg.ClickThrough;
             _labelsItem.Checked = cfg.ShowLabels;
             _rxItem.Checked = cfg.RxMode;
+            _desktopItem.Checked = cfg.Surface == "desktop";
         }
 
         /// <summary>Engine status → balloon, rate-limited so a flapping

@@ -16,6 +16,13 @@ namespace AutoCommand.Matrix
         /// <summary>left | right | full | manual — where the overlay lives.</summary>
         public string Dock { get; set; } = "right";
 
+        /// <summary>desktop | overlay — "desktop" parents the pane to the
+        /// wallpaper host (WorkerW): the rain paints over the desktop but
+        /// APPLICATION WINDOWS COVER IT, visible only where the desktop
+        /// shows. "overlay" floats above everything (the original
+        /// behavior).</summary>
+        public string Surface { get; set; } = "desktop";
+
         /// <summary>Overlay width in DIPs for left/right docking.</summary>
         public int WidthPx { get; set; } = 280;
 
@@ -164,6 +171,7 @@ namespace AutoCommand.Matrix
                 var doc = new Dictionary<string, object>
                 {
                     ["// dock"] = "left | right | full (whole screen, explicit) | manual (position below)",
+                    ["// surface"] = "desktop = behind app windows, over the wallpaper (default) | overlay = above everything",
                     ["// fontFile"] = "optional absolute path to a .ttf/.otf — overrides fontFamily",
                     ["// charset"] = "katakana-latin | katakana | latin | digits — or a literal set of characters",
                     ["// lettersPerTransmit"] = "falling letters per TX packet (auto-scales down under load)",
@@ -200,6 +208,7 @@ namespace AutoCommand.Matrix
         public void Normalize()
         {
             Dock = Dock?.Trim().ToLowerInvariant() is "left" or "full" or "manual" ? Dock.Trim().ToLowerInvariant() : "right";
+            Surface = Surface?.Trim().ToLowerInvariant() == "overlay" ? "overlay" : "desktop";
             WidthPx = Math.Clamp(WidthPx, 120, 4096);
             Opacity = Math.Clamp(Opacity, 0.30, 1.0);
             FontSizePx = Math.Clamp(FontSizePx, 9, 48);

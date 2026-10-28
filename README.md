@@ -31,7 +31,9 @@ pinned as a git submodule — but rains them down your screen instead:
   still tries to phone home.
 - **Transparent and dockable** — a slim always-on-top pane on the left or
   right edge of your desktop, out of the way of everything. It covers the
-  whole desktop only if you explicitly tell it to.
+  whole desktop only if you explicitly tell it to. By default it lives one
+  layer down — **over the desktop only, behind application windows** —
+  like a living wallpaper; switch to the always-on-top overlay whenever.
 - **Your colors, your font** — the glyph palette and typeface are plain JSON
   beside the exe; point it at any installed font or your own `.ttf`/`.otf`.
 - **A frozen backdrop under the rain** — a dim field of ambient glyphs at a
@@ -79,6 +81,7 @@ the right edge of the desktop.
 | Dock left / right | snap to that edge of the work area (taskbar stays visible) |
 | Dock full screen | the explicit whole-desktop mode |
 | Manual (drag the rain) | drag the pane anywhere; position is remembered |
+| Over the desktop only | paint the rain over the desktop but **behind application windows** — visible wherever the desktop shows (default on) |
 | Click-through | the overlay ignores the mouse entirely (tooltips off too) |
 | PID labels | show/hide the per-column PID digits |
 | Rain on receives too | also rain (in blue) on inbound packets |
@@ -96,6 +99,7 @@ font or colors while it's raining and watch it re-skin live.
 ```json
 {
   "dock": "right",
+  "surface": "desktop",
   "widthPx": 280,
   "opacity": 0.92,
   "clickThrough": false,
@@ -130,6 +134,7 @@ font or colors while it's raining and watch it re-skin live.
 | Key | Meaning |
 |---|---|
 | `dock` | `left` \| `right` (default) \| `full` (whole desktop — explicit) \| `manual` |
+| `surface` | `desktop` (default — rain over the wallpaper, **covered by application windows**) \| `overlay` (above everything) |
 | `widthPx` | side-dock pane width in DIPs |
 | `opacity` | window-level opacity, 0.30–1.00 |
 | `clickThrough` | mouse-transparent overlay |

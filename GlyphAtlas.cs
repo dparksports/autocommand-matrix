@@ -34,6 +34,23 @@ namespace AutoCommand.Matrix
         /// <see cref="GlyphChars"/>.</summary>
         public byte[][] Trail, Head, Blocked, BlockedHead, Rx;
 
+        /// <summary>Backdrop glyph cells (the steady ambient layer, never
+        /// touched by the trail fade).</summary>
+        public byte[][] Ambient;
+
+        /// <summary>Falling-glyph cells at the zLift scale — slightly
+        /// larger than the grid cell and drawn centered on it, so a
+        /// falling stream overlaps its neighbors and pops off the
+        /// backdrop.</summary>
+        public int LiftCellW, LiftCellH;
+        public bool HasLift;
+
+        public byte[][] TrailLift, HeadLift, BlockedLift, BlockedHeadLift, RxLift;
+
+        /// <summary>The same lifted glyphs in translucent black — the
+        /// offset shadow that sells the elevation.</summary>
+        public byte[][] ShadowLift;
+
         /// <summary>Digits 0–9 for the column PID labels, per role
         /// (normal / blocked), indexed by digit value.</summary>
         public byte[][] LabelDigits, LabelDigitsBlocked;
@@ -78,6 +95,26 @@ namespace AutoCommand.Matrix
                 .Select(d => RenderGlyph(typeface, labelEm, d.ToString(), c.Label, atlas.LabelCellW, atlas.LabelCellH)).ToArray();
             atlas.LabelDigitsBlocked = Enumerable.Range(0, 10)
                 .Select(d => RenderGlyph(typeface, labelEm, d.ToString(), c.Blocked, atlas.LabelCellW, atlas.LabelCellH)).ToArray();
+
+            // The elevated plane: the same falling glyphs, scaled by zLift
+            // (the affine projection of their elevation) plus a translucent
+            // black copy for the drop shadow. At 1.0 the lifted cells are
+            // identical to the grid cells and the shadow is skipped.
+            double lift = Math.Clamp(cfg.ZLift, 1.0, 1.6);
+            atlas.HasLift = lift > 1.001;
+            atlas.LiftCellW = Math.Max(atlas.CellW, (int)Math.Ceiling(atlas.CellW * lift));
+            atlas.LiftCellH = Math.Max(atlas.CellH, (int)Math.Ceiling(atlas.CellH * lift));
+            double emLift = em * lift;
+
+            atlas.TrailLift = chars.Select(ch => RenderGlyph(typeface, emLift, ch.ToString(), c.Trail, atlas.LiftCellW, atlas.LiftCellH)).ToArray();
+            atlas.HeadLift = chars.Select(ch => RenderGlyph(typeface, emLift, ch.ToString(), c.Head, atlas.LiftCellW, atlas.LiftCellH)).ToArray();
+            atlas.BlockedLift = chars.Select(ch => RenderGlyph(typeface, emLift, ch.ToString(), c.Blocked, atlas.LiftCellW, atlas.LiftCellH)).ToArray();
+            atlas.BlockedHeadLift = chars.Select(ch => RenderGlyph(typeface, emLift, ch.ToString(), c.BlockedHead, atlas.LiftCellW, atlas.LiftCellH)).ToArray();
+            atlas.RxLift = chars.Select(ch => RenderGlyph(typeface, emLift, ch.ToString(), c.Rx, atlas.LiftCellW, atlas.LiftCellH)).ToArray();
+            atlas.ShadowLift = chars.Select(ch => RenderGlyph(typeface, emLift, ch.ToString(), "#000000", atlas.LiftCellW, atlas.LiftCellH, alpha: 140)).ToArray();
+
+            // The backdrop field, a touch smaller than the rain grid.
+            atlas.Ambient = chars.Select(ch => RenderGlyph(typeface, em * 0.92, ch.ToString(), c.Ambient, atlas.CellW, atlas.CellH)).ToArray();
 
             return atlas;
         }
@@ -147,10 +184,12 @@ namespace AutoCommand.Matrix
         }
 
         /// <summary>Renders one glyph centered in a transparent Pbgra32 cell
-        /// and copies it out to a raw buffer the frame loop can blit.</summary>
-        private static byte[] RenderGlyph(Typeface tf, double em, string text, string hexColor, int w, int h)
+        /// and copies it out to a raw buffer the frame loop can blit. Alpha
+        /// below 255 premultiplies the color (the shadow set uses this).</summary>
+        private static byte[] RenderGlyph(Typeface tf, double em, string text, string hexColor, int w, int h, byte alpha = 255)
         {
-            var color = (Color)ColorConverter.ConvertFromString(hexColor);
+            var opaque = (Color)ColorConverter.ConvertFromString(hexColor);
+            var color = alpha >= 255 ? opaque : Color.FromArgb(alpha, opaque.R, opaque.G, opaque.B);
             var ft = MakeText(tf, em, text, color);
 
             var visual = new DrawingVisual();

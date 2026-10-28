@@ -32,6 +32,12 @@ pinned as a git submodule — but rains them down your screen instead:
   whole desktop only if you explicitly tell it to.
 - **Your colors, your font** — the glyph palette and typeface are plain JSON
   beside the exe; point it at any installed font or your own `.ttf`/`.otf`.
+- **A quiet backdrop under the rain** — a dim field of ambient glyphs at a
+  steady brightness (its layer is never touched by the trail fade), easing
+  down the pane far slower than any falling stream.
+- **The falling glyphs float above that backdrop** — drawn at a slight
+  affine scale-up (`zLift`, the 2-D projection of an elevated plane) with a
+  soft offset shadow, so the streams pop off the background characters.
 - **Hover a column** (when click-through is off) for the story: process
   name, tx/rx counters, tracked connections, block state.
 
@@ -89,13 +95,18 @@ font or colors while it's raining and watch it re-skin live.
     "blocked": "#FF3333",
     "blockedHead": "#FFDDDD",
     "label": "#7FFF9F",
-    "rx": "#2E7DFF"
+    "rx": "#2E7DFF",
+    "ambient": "#0E5C1F"
   },
   "lettersPerTransmit": 1.0,
   "maxColumns": 64,
   "blockPollSeconds": 60,
   "showLabels": true,
-  "rxMode": false
+  "rxMode": false,
+  "ambient": true,
+  "ambientDriftSeconds": 2.5,
+  "ambientDensity": 0.9,
+  "zLift": 1.18
 }
 ```
 
@@ -118,6 +129,11 @@ font or colors while it's raining and watch it re-skin live.
 | `blockPollSeconds` | firewall block-inventory poll (red-mode freshness) |
 | `showLabels` | the vertical PID digits atop each column |
 | `rxMode` | also rain on receives |
+| `ambient` | dim backdrop glyph field behind the rain, steady brightness |
+| `ambientDriftSeconds` | seconds per backdrop row drift (the "slower" layer) |
+| `ambientDensity` | fraction of backdrop cells carrying a glyph |
+| `zLift` | falling-glyph scale-up + shadow — the pop above the backdrop (1.0 = flat) |
+| `colors.ambient` | the backdrop glyph color |
 
 Blocked-state changes can lag the firewall by up to `blockPollSeconds`
 (same cadence as AutoCommand's own Process Monitor tab).
@@ -146,6 +162,10 @@ Intercept / Contain) are a pinned git submodule under `external/`, consumed
 the same way the main app consumes them — plain `ProjectReference`s to
 UI-free class libraries. They are not on NuGet; to pick up core changes,
 bump the submodule and commit the new gitlink.
+
+`.\run.ps1` is the dev loop: it elevates (UAC), stops a running instance,
+rebuilds Release, and relaunches — a running elevated instance otherwise
+locks `bin\Release` against a plain shell.
 
 Running from a dev shell needs an elevated shell (the manifest demands
 administrator for the raw socket).

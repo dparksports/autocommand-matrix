@@ -61,6 +61,23 @@ namespace AutoCommand.Matrix
         /// Default off — the rain reads as outbound transmits only.</summary>
         public bool RxMode { get; set; } = false;
 
+        /// <summary>Dim backdrop field of glyphs behind the rain — a steady
+        /// brightness (its layer is never touched by the trail fade),
+        /// drifting down much slower than the falling streams.</summary>
+        public bool Ambient { get; set; } = true;
+
+        /// <summary>Seconds per row of backdrop drift (0.5–60).</summary>
+        public double AmbientDriftSeconds { get; set; } = 2.5;
+
+        /// <summary>Fraction of backdrop cells carrying a glyph (0.1–1.0);
+        /// below 1.0 leaves breathing holes in the field.</summary>
+        public double AmbientDensity { get; set; } = 0.9;
+
+        /// <summary>Pseudo-3D pop for the falling glyphs: they render at
+        /// this scale with a soft offset shadow, as if on a plane above the
+        /// backdrop (1.0 = flat, no shadow).</summary>
+        public double ZLift { get; set; } = 1.18;
+
         public class RainColors
         {
             /// <summary>Lead glyph of a falling stream — near-white green.</summary>
@@ -75,6 +92,8 @@ namespace AutoCommand.Matrix
             public string Label { get; set; } = "#7FFF9F";
             /// <summary>Rx glyph tint when RxMode is on.</summary>
             public string Rx { get; set; } = "#2E7DFF";
+            /// <summary>The steady backdrop field behind the rain.</summary>
+            public string Ambient { get; set; } = "#0E5C1F";
         }
 
         // ------------------------------------------------------------------
@@ -128,7 +147,9 @@ namespace AutoCommand.Matrix
                     ["// fontFile"] = "optional absolute path to a .ttf/.otf — overrides fontFamily",
                     ["// charset"] = "katakana-latin | katakana | latin | digits — or a literal set of characters",
                     ["// lettersPerTransmit"] = "falling letters per TX packet (auto-scales down under load)",
-                    ["// colors"] = "any #RRGGBB — head/trail/blocked/blockedHead/label/rx"
+                    ["// colors"] = "any #RRGGBB — head/trail/blocked/blockedHead/label/rx/ambient",
+                    ["// ambient"] = "dim steady backdrop field behind the rain; ambientDriftSeconds = seconds per row, ambientDensity = fraction of cells filled",
+                    ["// zLift"] = "falling-glyph scale-up + soft shadow — the pop above the backdrop (1.0 = flat)"
                 };
                 var merged = new Dictionary<string, object>();
                 foreach (var kv in doc) merged[kv.Key] = kv.Value;
@@ -162,6 +183,9 @@ namespace AutoCommand.Matrix
             LettersPerTransmit = Math.Clamp(LettersPerTransmit, 0.05, 20.0);
             MaxColumns = Math.Clamp(MaxColumns, 4, 256);
             BlockPollSeconds = Math.Clamp(BlockPollSeconds, 10, 3600);
+            AmbientDriftSeconds = Math.Clamp(AmbientDriftSeconds, 0.5, 60.0);
+            AmbientDensity = Math.Clamp(AmbientDensity, 0.1, 1.0);
+            ZLift = Math.Clamp(ZLift, 1.0, 1.6);
             if (string.IsNullOrWhiteSpace(FontFamily)) FontFamily = "Consolas";
             if (string.IsNullOrWhiteSpace(Charset)) Charset = "katakana-latin";
             Colors ??= new RainColors();
@@ -177,12 +201,16 @@ namespace AutoCommand.Matrix
                 || FontSizePx != other.FontSizePx
                 || !string.Equals(Charset, other.Charset, StringComparison.Ordinal)
                 || ShowLabels != other.ShowLabels
+                || Ambient != other.Ambient
+                || Math.Abs(AmbientDensity - other.AmbientDensity) > 0.001
+                || Math.Abs(ZLift - other.ZLift) > 0.001
                 || Colors.Head != other.Colors.Head
                 || Colors.Trail != other.Colors.Trail
                 || Colors.Blocked != other.Colors.Blocked
                 || Colors.BlockedHead != other.Colors.BlockedHead
                 || Colors.Label != other.Colors.Label
-                || Colors.Rx != other.Colors.Rx;
+                || Colors.Rx != other.Colors.Rx
+                || Colors.Ambient != other.Colors.Ambient;
         }
     }
 

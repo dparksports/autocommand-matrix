@@ -13,8 +13,11 @@
         UseLayoutRounding="True"
         SnapsToDevicePixels="True">
     <Grid>
-        <!-- The whole app is this one surface: a rain frame per composition
-             tick, per-pixel transparent everywhere else. -->
+        <!-- Two stacked surfaces: the dim ambient backdrop below, the
+             falling rain (and PID labels) above — WPF composites both with
+             per-pixel alpha, so the backdrop's steady brightness never
+             fights the rain's fading trails. -->
+        <Image x:Name="AmbientImage" />
         <Image x:Name="RainImage" />
     </Grid>
 </Window>

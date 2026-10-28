@@ -39,21 +39,33 @@ namespace AutoCommand.Matrix
     }
 
     /// <summary>
-    /// The rain itself. Every frame: fade the previous frame toward
-    /// transparent, clear and redraw the PID label band, then let each
-    /// column spend the letter budget its PID's transmits have banked —
-    /// every TX packet buys one falling glyph step in that PID's column.
-    /// A traffic-blocked PID spends its budget in red.
+    /// The rain itself, in two stacked layers: a dim ambient backdrop of
+    /// glyphs on its own surface — steady brightness, because the trail
+    /// fade never touches it, drifting down far slower than any stream —
+    /// and the falling rain above it, drawn from the zLift-scaled atlas
+    /// cells with a soft offset shadow so the streams float a plane above
+    /// the backdrop. Every frame the rain layer fades toward transparent,
+    /// then each column spends the letter budget its PID's transmits have
+    /// banked — every TX packet buys one falling glyph step in that PID's
+    /// column. A traffic-blocked PID spends its budget in red.
     /// </summary>
     public sealed class MatrixRenderer : IDisposable
     {
         private readonly Image _image;
+        private readonly Image _ambientImage;
         private readonly MonitorEngine _engine;
         private readonly Random _rand = new();
 
         private MatrixRainConfig _cfg;
         private GlyphAtlas _atlas;
         private WriteableBitmap _bmp;
+        private WriteableBitmap _bgBmp;      // the ambient backdrop layer
+
+        // Backdrop state: a per-cell glyph grid, redrawn only when it
+        // changes (a row drift or a random mutation) — never per frame.
+        private int[,] _ambientGrid;         // [col,row] glyph index, -1 = empty
+        private int _ambientCols, _ambientRows;
+        private double _driftAccumSec, _ambientMutateSec;
 
         private int _w, _h;              // device pixels
         private int _bandH;              // label band height (device px)
@@ -70,9 +82,10 @@ namespace AutoCommand.Matrix
         private const int MaxDropsPerColor = 3;
         private const int PidLabelRows = 6;   // PIDs up to 6 digits, vertically
 
-        public MatrixRenderer(Image image, MonitorEngine engine, MatrixRainConfig cfg)
+        public MatrixRenderer(Image ambientImage, Image rainImage, MonitorEngine engine, MatrixRainConfig cfg)
         {
-            _image = image;
+            _ambientImage = ambientImage;
+            _image = rainImage;
             _engine = engine;
             ApplyConfig(cfg);
         }
@@ -123,6 +136,9 @@ namespace AutoCommand.Matrix
             _bmp = new WriteableBitmap(w, h, 96, 96, PixelFormats.Pbgra32, null);
             _image.Source = _bmp;
             _image.Stretch = Stretch.Fill;
+            _bgBmp = new WriteableBitmap(w, h, 96, 96, PixelFormats.Pbgra32, null);
+            _ambientImage.Source = _bgBmp;
+            _ambientImage.Stretch = Stretch.Fill;
             RecomputeGrid();
         }
 
@@ -132,6 +148,7 @@ namespace AutoCommand.Matrix
             _bandH = _cfg.ShowLabels ? 3 + PidLabelRows * _atlas.LabelCellH + 3 : 0;
             _gridCols = Math.Max(1, _w / _atlas.CellW);
             _gridRows = Math.Max(1, (_h - _bandH) / _atlas.CellH);
+            RebuildAmbientGrid();
         }
 
         public void Start()
@@ -193,6 +210,126 @@ namespace AutoCommand.Matrix
             {
                 _bmp.Unlock();
             }
+
+            TickAmbient(dt);
+        }
+
+        // ------------------------------------------------------------------
+        // Ambient backdrop — the slow, steady-brightness glyph field
+        // ------------------------------------------------------------------
+
+        /// <summary>(Re)builds the backdrop grid after a resize or an atlas
+        /// rebuild; disabled ambient clears its surface.</summary>
+        private void RebuildAmbientGrid()
+        {
+            if (_bgBmp == null || _atlas == null) return;
+            if (!_cfg.Ambient)
+            {
+                _ambientGrid = null;
+                _bgBmp.Lock();
+                try
+                {
+                    unsafe { new Span<byte>((void*)_bgBmp.BackBuffer, _h * _bgBmp.BackBufferStride).Clear(); }
+                    _bgBmp.AddDirtyRect(new Int32Rect(0, 0, _w, _h));
+                }
+                finally { _bgBmp.Unlock(); }
+                return;
+            }
+
+            _ambientCols = Math.Max(1, _w / _atlas.CellW);
+            _ambientRows = Math.Max(1, (_h - _bandH) / _atlas.CellH);
+            _ambientGrid = new int[_ambientCols, _ambientRows];
+            for (int c = 0; c < _ambientCols; c++)
+                for (int r = 0; r < _ambientRows; r++)
+                    _ambientGrid[c, r] = _rand.NextDouble() <= _cfg.AmbientDensity
+                        ? _rand.Next(_atlas.GlyphChars.Length) : -1;
+            RedrawAmbientFull();
+        }
+
+        private unsafe void RedrawAmbientFull()
+        {
+            if (_bgBmp == null) return;
+            _bgBmp.Lock();
+            try
+            {
+                new Span<byte>((void*)_bgBmp.BackBuffer, _h * _bgBmp.BackBufferStride).Clear();
+                if (_ambientGrid != null)
+                {
+                    byte* dstBase = (byte*)_bgBmp.BackBuffer;
+                    int stride = _bgBmp.BackBufferStride;
+                    for (int c = 0; c < _ambientCols; c++)
+                        for (int r = 0; r < _ambientRows; r++)
+                            BlitAmbientCell(dstBase, stride, c, r);
+                }
+                _bgBmp.AddDirtyRect(new Int32Rect(0, 0, _w, _h));
+            }
+            finally { _bgBmp.Unlock(); }
+        }
+
+        private unsafe void BlitAmbientCell(byte* dstBase, int stride, int c, int r)
+        {
+            int idx = _ambientGrid[c, r];
+            if (idx < 0) return;
+            BlitClipped(dstBase, stride, _atlas.Ambient[idx], _atlas.CellW, _atlas.CellH,
+                c * _atlas.CellW, _bandH + r * _atlas.CellH, _w, _h);
+        }
+
+        /// <summary>The backdrop's slow life: one row of drift per
+        /// ambientDriftSeconds, and a few random glyph mutations between
+        /// drifts. Runs on the ambient surface only — consistent brightness,
+        /// because nothing here ever fades.</summary>
+        private void TickAmbient(double dt)
+        {
+            if (!_cfg.Ambient || _bgBmp == null || _ambientGrid == null) return;
+            _driftAccumSec += dt;
+            _ambientMutateSec += dt;
+
+            if (_driftAccumSec >= _cfg.AmbientDriftSeconds)
+            {
+                _driftAccumSec = 0;
+                for (int c = 0; c < _ambientCols; c++)
+                {
+                    for (int r = _ambientRows - 1; r > 0; r--)
+                        _ambientGrid[c, r] = _ambientGrid[c, r - 1];
+                    _ambientGrid[c, 0] = _rand.NextDouble() <= _cfg.AmbientDensity
+                        ? _rand.Next(_atlas.GlyphChars.Length) : -1;
+                }
+                RedrawAmbientFull();
+                return;
+            }
+
+            if (_ambientMutateSec >= 0.12)
+            {
+                _ambientMutateSec = 0;
+                _bgBmp.Lock();
+                try
+                {
+                    unsafe
+                    {
+                        byte* dstBase = (byte*)_bgBmp.BackBuffer;
+                        int stride = _bgBmp.BackBufferStride;
+                        int n = 1 + _rand.Next(3);
+                        for (int i = 0; i < n; i++)
+                        {
+                            int c = _rand.Next(_ambientCols), r = _rand.Next(_ambientRows);
+                            _ambientGrid[c, r] = _rand.Next(_atlas.GlyphChars.Length);
+                            // Clear the cell before the new glyph — drawing
+                            // over the old one would muddy into a blob.
+                            ClearCell(dstBase, stride, c * _atlas.CellW, _bandH + r * _atlas.CellH,
+                                _atlas.CellW, _atlas.CellH);
+                            BlitAmbientCell(dstBase, stride, c, r);
+                        }
+                    }
+                    _bgBmp.AddDirtyRect(new Int32Rect(0, 0, _w, _h));
+                }
+                finally { _bgBmp.Unlock(); }
+            }
+        }
+
+        private static unsafe void ClearCell(byte* dstBase, int stride, int x, int y, int w, int h)
+        {
+            for (int r = 0; r < h; r++)
+                new Span<byte>(dstBase + (y + r) * stride + x * 4, w * 4).Clear();
         }
 
         /// <summary>A new snapshot from the engine: convert absolute counter
@@ -296,7 +433,6 @@ namespace AutoCommand.Matrix
         private unsafe void DrawPidLabel(RainColumn col, int stride)
         {
             int x = col.Slot * _atlas.CellW + Math.Max(0, (_atlas.CellW - _atlas.LabelCellW) / 2);
-            if (x + _atlas.LabelCellW > _w) return;
 
             string digits = col.Pid.ToString();
             if (digits.Length > PidLabelRows) digits = digits.Substring(digits.Length - PidLabelRows);
@@ -305,9 +441,9 @@ namespace AutoCommand.Matrix
             var font = col.Blocked ? _atlas.LabelDigitsBlocked : _atlas.LabelDigits;
             for (int i = 0; i < digits.Length; i++)
             {
-                var glyph = font[digits[i] - '0'];
                 int y = 3 + i * _atlas.LabelCellH;
-                Blit(dstBase, stride, glyph, _atlas.LabelCellW, _atlas.LabelCellH, x, y);
+                BlitClipped(dstBase, stride, font[digits[i] - '0'],
+                    _atlas.LabelCellW, _atlas.LabelCellH, x, y, _w, _h);
             }
         }
 
@@ -382,33 +518,48 @@ namespace AutoCommand.Matrix
 
         private (byte[][] head, byte[][] trail) GlyphSetsFor(RainColumn col, bool rx)
         {
-            if (rx) return (_atlas.Rx, _atlas.Rx);
+            if (rx) return (_atlas.RxLift, _atlas.RxLift);
             return col.Blocked
-                ? (_atlas.BlockedHead, _atlas.Blocked)
-                : (_atlas.Head, _atlas.Trail);
+                ? (_atlas.BlockedHeadLift, _atlas.BlockedLift)
+                : (_atlas.HeadLift, _atlas.TrailLift);
         }
 
+        /// <summary>Draws one falling-glyph cell: the zLift-scaled glyph
+        /// centered on its grid cell (so streams overlap their neighbors),
+        /// with its shadow landing a couple of pixels down-right on the
+        /// backdrop below — the depth cue that makes the stream float.</summary>
         private unsafe void DrawCell(RainColumn col, int row, byte[][] glyphSet)
         {
             if (row < 0 || row >= _gridRows) return;
-            var glyph = glyphSet[_rand.Next(glyphSet.Length)];
-            int x = col.Slot * _atlas.CellW;
-            int y = _bandH + row * _atlas.CellH;
-            if (x + _atlas.CellW > _w || y + _atlas.CellH > _h) return;
-            Blit((byte*)_bmp.BackBuffer, _bmp.BackBufferStride, glyph,
-                 _atlas.CellW, _atlas.CellH, x, y);
+            int gi = _rand.Next(glyphSet.Length);
+
+            int x = col.Slot * _atlas.CellW + (_atlas.CellW - _atlas.LiftCellW) / 2;
+            int y = _bandH + row * _atlas.CellH + (_atlas.CellH - _atlas.LiftCellH) / 2;
+            byte* dstBase = (byte*)_bmp.BackBuffer;
+            int stride = _bmp.BackBufferStride;
+
+            if (_atlas.HasLift)
+            {
+                int so = Math.Max(1, (_atlas.LiftCellW - _atlas.CellW) / 2);
+                BlitClipped(dstBase, stride, _atlas.ShadowLift[gi],
+                    _atlas.LiftCellW, _atlas.LiftCellH, x + so, y + so + 1, _w, _h);
+            }
+            BlitClipped(dstBase, stride, glyphSet[gi],
+                _atlas.LiftCellW, _atlas.LiftCellH, x, y, _w, _h);
         }
 
         /// <summary>Source-over blend of a premultiplied glyph cell onto the
-        /// surface (both Pbgra32, channel order identical).</summary>
-        private static unsafe void Blit(byte* dstBase, int stride, byte[] src, int cw, int ch, int x, int y)
+        /// surface (both Pbgra32, channel order identical). copyW/copyH may
+        /// be smaller than the source cell for edge clipping; srcW keeps the
+        /// source rows aligned through the clipped columns.</summary>
+        private static unsafe void Blit(byte* dstBase, int stride, byte[] src, int srcW, int copyW, int copyH, int x, int y)
         {
             byte* dst = dstBase + y * stride + x * 4;
             int si = 0;
-            for (int r = 0; r < ch; r++, dst += stride)
+            for (int r = 0; r < copyH; r++, dst += stride)
             {
                 byte* d = dst;
-                for (int c = 0; c < cw; c++, d += 4, si += 4)
+                for (int c = 0; c < copyW; c++, d += 4, si += 4)
                 {
                     int sa = src[si + 3];
                     if (sa == 0) continue;
@@ -423,7 +574,17 @@ namespace AutoCommand.Matrix
                     d[2] = (byte)(src[si + 2] + ((d[2] * inv) >> 8));
                     d[3] = (byte)(sa + ((d[3] * inv) >> 8));
                 }
+                si += (srcW - copyW) * 4;
             }
+        }
+
+        /// <summary>Blit with right/bottom clipping against the surface.</summary>
+        private static unsafe void BlitClipped(byte* dstBase, int stride, byte[] src, int srcW, int srcH, int x, int y, int maxW, int maxH)
+        {
+            int w = Math.Min(srcW, maxW - x);
+            int h = Math.Min(srcH, maxH - y);
+            if (w <= 0 || h <= 0) return;
+            Blit(dstBase, stride, src, srcW, w, h, x, y);
         }
 
         // ------------------------------------------------------------------

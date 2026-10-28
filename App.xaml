@@ -1,0 +1,11 @@
+<Application x:Class="AutoCommand.Matrix.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             ShutdownMode="OnExplicitShutdown">
+    <!-- No StartupUri: OnStartup wires config, engine, window and tray in
+         order (the tray must exist before the engine starts, so first-run
+         status like "Sysmon not installed" lands in a balloon, not the
+         void). Shutdown is explicit — the tray's Exit is the only way out. -->
+    <Application.Resources>
+    </Application.Resources>
+</Application>

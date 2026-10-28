@@ -1,0 +1,8 @@
+bin/
+obj/
+publish/
+*.user
+*.suo
+.vs/
+matrix_rain.json
+matrix_rain_window.json

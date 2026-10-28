@@ -1,0 +1,178 @@
+# AutoCommand Matrix
+
+**The holiday-edition process monitor: your PC's network traffic as Matrix rain.**
+
+AutoCommand's Process Monitor shows one boring row per (process → remote IP)
+conversation. This overlay runs the same engines — the UI-free core
+libraries of [AutoCommand II](https://github.com/dparksports/autocommand-ii),
+pinned as a git submodule — but rains them down your screen instead:
+
+```
+ 2   4   8   16  31          ← PIDs, one column per process instance
+ 0   0   8   4   2
+ 4   4   4   2   0   ﾊ
+ 8   8   0   8   4   ﾘ   ﾊ
+ ﾊ   2   4   ﾘ   2   ﾋ   ﾍ
+ ﾘ   8   8   ﾔ   4   ﾆ   ﾄ   ← every falling glyph = one transmit
+ ﾂ   0   2   0   8   ﾈ   ﾗ     by that PID (≈ one TX packet)
+ 4   4   ﾔ   4   0   ﾄ   ﾈ
+ 8   0   2   2   ﾊ   ﾚ   ﾎ
+```
+
+- **One rain column per process instance PID**, labeled at the top.
+- **Falling letters are transmits** — each glyph that drops is a packet that
+  PID put on the wire. A chatty process streams; a quiet one trickles; an
+  idle one goes still and fades.
+- **A traffic-blocked PID rains red.** Block a process or an IP (in
+  AutoCommand, or any firewall rule AutoCommand recognizes) and its column
+  switches to red glyphs — and keeps rolling a slow red heartbeat while it
+  still tries to phone home.
+- **Transparent and dockable** — a slim always-on-top pane on the left or
+  right edge of your desktop, out of the way of everything. It covers the
+  whole desktop only if you explicitly tell it to.
+- **Your colors, your font** — the glyph palette and typeface are plain JSON
+  beside the exe; point it at any installed font or your own `.ttf`/`.otf`.
+- **Hover a column** (when click-through is off) for the story: process
+  name, tx/rx counters, tracked connections, block state.
+
+## Prerequisites
+
+| Requirement | Why | Without it |
+|---|---|---|
+| Windows 10/11 x64 | raw sockets, WPF | — |
+| Administrator (UAC prompt) | raw-socket sniffing (SIO_RCVALL), Sysmon log, firewall inventory | the app cannot start |
+| Sysmon (optional) | live per-connection events | falls back to a kernel TCP-table snapshot — established connections still get columns, new ones appear on the slower snapshot path |
+| Windows Firewall (optional) | the red blocked mode | no red; the rain stays green |
+
+The self-contained release zip needs no .NET install.
+
+## Getting it
+
+Grab `AutoCommand-Matrix-v*-win-x64.zip` from
+[Releases](https://github.com/dparksports/autocommand-matrix/releases),
+unzip, unblock (`Unblock-File` or file Properties), run `AutoCommand.Matrix.exe`,
+accept the UAC prompt. A green **M** tray icon appears; the rain docks to
+the right edge of the desktop.
+
+## The tray menu (the whole UI)
+
+| Menu item | Effect |
+|---|---|
+| Dock left / right | snap to that edge of the work area (taskbar stays visible) |
+| Dock full screen | the explicit whole-desktop mode |
+| Manual (drag the rain) | drag the pane anywhere; position is remembered |
+| Click-through | the overlay ignores the mouse entirely (tooltips off too) |
+| PID labels | show/hide the per-column PID digits |
+| Rain on receives too | also rain (in blue) on inbound packets |
+| Edit matrix_rain.json | open the config in Notepad — save and it hot-applies |
+| Reload config | re-read the file now |
+| Exit | quit (Alt-F4 merely hides to tray) |
+
+## Configuration — `matrix_rain.json`
+
+Written beside the exe on first run, re-read on every save — change the
+font or colors while it's raining and watch it re-skin live.
+
+```json
+{
+  "dock": "right",
+  "widthPx": 280,
+  "opacity": 0.92,
+  "clickThrough": false,
+  "fontFamily": "Consolas",
+  "fontFile": "",
+  "fontSizePx": 18,
+  "charset": "katakana-latin",
+  "colors": {
+    "head": "#E8FFE8",
+    "trail": "#00FF41",
+    "blocked": "#FF3333",
+    "blockedHead": "#FFDDDD",
+    "label": "#7FFF9F",
+    "rx": "#2E7DFF"
+  },
+  "lettersPerTransmit": 1.0,
+  "maxColumns": 64,
+  "blockPollSeconds": 60,
+  "showLabels": true,
+  "rxMode": false
+}
+```
+
+| Key | Meaning |
+|---|---|
+| `dock` | `left` \| `right` (default) \| `full` (whole desktop — explicit) \| `manual` |
+| `widthPx` | side-dock pane width in DIPs |
+| `opacity` | window-level opacity, 0.30–1.00 |
+| `clickThrough` | mouse-transparent overlay |
+| `fontFamily` | any installed family — monospace fonts look the most Matrix |
+| `fontFile` | absolute path to a `.ttf`/`.otf`; overrides `fontFamily` — the rain runs in *your* font |
+| `fontSizePx` | glyph size (cell width follows the widest glyph) |
+| `charset` | `katakana-latin` (default) \| `katakana` \| `latin` \| `digits`, or a literal string of ≥4 characters |
+| `colors.head` / `trail` | the bright lead glyph / the decaying trail |
+| `colors.blocked` / `blockedHead` | what a blocked PID rains |
+| `colors.label` | the PID digits |
+| `colors.rx` | receive glyphs, when `rxMode` is on |
+| `lettersPerTransmit` | letters bought per TX packet; auto-scales down under heavy traffic so a busy PID streams fast instead of turning into a solid wall |
+| `maxColumns` | rain columns before the stalest PID gives up its slot |
+| `blockPollSeconds` | firewall block-inventory poll (red-mode freshness) |
+| `showLabels` | the vertical PID digits atop each column |
+| `rxMode` | also rain on receives |
+
+Blocked-state changes can lag the firewall by up to `blockPollSeconds`
+(same cadence as AutoCommand's own Process Monitor tab).
+
+## How the rain maps to reality
+
+| In the rain | On your machine |
+|---|---|
+| a column appears | a process PID opened a tracked network connection (Sysmon event, or the boot baseline snapshot) |
+| letters fall | that PID transmitted packets — one glyph per transmit |
+| column goes red | the firewall inventory says that PID's traffic (its process path or remote IP) is blocked |
+| red letters keep falling | the blocked process is *still trying* — each new connection attempt rolls a glyph |
+| a column stills and fades | the process went quiet (or exited) |
+| hover tooltip | PID, process name, tx/rx packets & bytes, connection count, block state |
+
+## Building
+
+```powershell
+git clone --recursive https://github.com/dparksports/autocommand-matrix.git
+cd autocommand-matrix
+dotnet build AutoCommand.Matrix.csproj -c Release
+```
+
+The `--recursive` matters: the AutoCommand II core libraries (NetWatch /
+Intercept / Contain) are a pinned git submodule under `external/`, consumed
+the same way the main app consumes them — plain `ProjectReference`s to
+UI-free class libraries. They are not on NuGet; to pick up core changes,
+bump the submodule and commit the new gitlink.
+
+Running from a dev shell needs an elevated shell (the manifest demands
+administrator for the raw socket).
+
+## Performance notes
+
+Rendering is one `WriteableBitmap` composited on the UI thread: per frame a
+premultiplied alpha fade pass plus pre-rasterized glyph blits — no text
+layout on the hot path. Side docks run at 60 fps; the full-desktop dock
+drops to 30 fps to keep the 2M-pixel fade cheap.
+
+## Privacy
+
+The overlay is a pure observer: it makes **no outbound network requests of
+its own** (the DNS/RDAP geo resolver inside the core is deliberately left
+unstarted — the rain never shows hostnames). It reads the Sysmon event log,
+a local raw socket, and the firewall's block inventory. Nothing leaves the
+machine.
+
+## Relation to AutoCommand
+
+This is a standalone face over the
+[AutoCommand II](https://github.com/dparksports/autocommand-ii) core
+engines — `SysmonWatcherService` and `RawSocketSnifferService` feed the
+exact same shared row table the main app's Process Monitor tab uses;
+`FirewallService.GetBlockedInventoryAsync()` is the red-mode truth source.
+"One engine, many faces": AgentHost (headless MCP), the WPF app, and now
+the rain.
+
+Licensed Apache-2.0, like everything in the AutoCommand family.

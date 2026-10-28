@@ -1,0 +1,3 @@
+[submodule "external/autocommand-ii"]
+	path = external/autocommand-ii
+	url = https://github.com/dparksports/autocommand-ii.git

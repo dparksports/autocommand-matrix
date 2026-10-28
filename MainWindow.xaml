@@ -1,0 +1,20 @@
+<Window x:Class="AutoCommand.Matrix.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="AutoCommand Matrix"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        Topmost="True"
+        ShowInTaskbar="False"
+        ShowActivated="False"
+        Focusable="False"
+        ResizeMode="NoResize"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True">
+    <Grid>
+        <!-- The whole app is this one surface: a rain frame per composition
+             tick, per-pixel transparent everywhere else. -->
+        <Image x:Name="RainImage" />
+    </Grid>
+</Window>

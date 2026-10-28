@@ -1,0 +1,58 @@
+name: release
+
+# Tag v<Version> (must equal <Version> in AutoCommand.Matrix.csproj) →
+# self-contained win-x64 zip on a GitHub release. The core libraries live
+# in the autocommand-ii submodule — checkout must be recursive or the
+# ProjectReferences dangle.
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Publish
+        run: dotnet publish AutoCommand.Matrix.csproj -c Release -r win-x64 --self-contained -o publish
+
+      - name: Verify tag matches assembly version
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $actual = (Get-Item publish/AutoCommand.Matrix.exe).VersionInfo.ProductVersion
+          if ("v$actual" -ne $tag) {
+            throw "tag $tag does not match csproj version $actual — bump <Version> in AutoCommand.Matrix.csproj"
+          }
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $ver = "${{ github.ref_name }}".Substring(1)
+          Compress-Archive -Path publish/* -DestinationPath "AutoCommand-Matrix-v$ver-win-x64.zip"
+          $hash = (Get-FileHash "AutoCommand-Matrix-v$ver-win-x64.zip" -Algorithm SHA256).Hash
+          "$hash  AutoCommand-Matrix-v$ver-win-x64.zip" | Out-File SHA256SUMS.txt -Encoding ascii
+
+      - name: Create release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $ver = $tag.Substring(1)
+          gh release create $tag `
+            "AutoCommand-Matrix-v$ver-win-x64.zip" `
+            SHA256SUMS.txt `
+            --title "AutoCommand Matrix v$ver" `
+            --notes "Holiday-edition Matrix-rain process monitor — one rain column per process PID, falling letters are transmits, blocked PIDs rain red. Self-contained win-x64; right-click the tray icon to dock, click-through, or restyle. See the README for the matrix_rain.json knobs."

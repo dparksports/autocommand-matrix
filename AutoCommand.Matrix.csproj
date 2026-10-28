@@ -1,0 +1,54 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- AutoCommand Matrix — the holiday-edition process monitor.
+
+       One engine, many faces: this exe reuses the UI-free core libraries
+       of AutoCommand II (NetWatch / Intercept / Contain) through a pinned
+       git submodule, and replaces the Process Monitor's DataGrid rows
+       with a Matrix-rain overlay:
+
+         - one rain column per tracked process instance PID
+         - falling letters = transmits (each glyph ≈ one TX packet)
+         - a traffic-blocked PID rains red
+         - transparent, docks left/right/full-screen, click-through-able
+         - colors and font are the user's (matrix_rain.json beside the exe)
+
+       The cores are NOT published to NuGet — the submodule pin below is
+       the dependency contract; bump it deliberately. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Version>2026.10.27.0</Version>
+    <AssemblyName>AutoCommand.Matrix</AssemblyName>
+    <Product>AutoCommand Matrix</Product>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The submodule's sources compile as their own projects via the
+         ProjectReferences below — keep them out of THIS project's default
+         globs (an SDK project would otherwise swallow external\**\*.cs and
+         .xaml into the app). -->
+    <Compile Remove="external\**" />
+    <Page Remove="external\**" />
+    <ApplicationDefinition Remove="external\**" />
+    <None Remove="external\**" />
+    <Content Remove="external\**" />
+    <EmbeddedResource Remove="external\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Layering per REWRITE.md: Contain → Intercept → NetWatch —
+         referencing all three is what the main AutoCommand app does;
+         transitive references pull SvchostAnalyzer.Core along. -->
+    <ProjectReference Include="external\autocommand-ii\core\AutoCommand.NetWatch.Core\AutoCommand.NetWatch.Core.csproj" />
+    <ProjectReference Include="external\autocommand-ii\core\AutoCommand.Intercept.Core\AutoCommand.Intercept.Core.csproj" />
+    <ProjectReference Include="external\autocommand-ii\core\AutoCommand.Contain.Core\AutoCommand.Contain.Core.csproj" />
+  </ItemGroup>
+
+</Project>

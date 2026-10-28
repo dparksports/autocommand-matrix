@@ -106,7 +106,7 @@ font or colors while it's raining and watch it re-skin live.
   "ambient": true,
   "ambientDriftSeconds": 2.5,
   "ambientDensity": 0.9,
-  "zLift": 1.18
+  "zLift": 1.35
 }
 ```
 

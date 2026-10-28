@@ -75,8 +75,9 @@ namespace AutoCommand.Matrix
 
         /// <summary>Pseudo-3D pop for the falling glyphs: they render at
         /// this scale with a soft offset shadow, as if on a plane above the
-        /// backdrop (1.0 = flat, no shadow).</summary>
-        public double ZLift { get; set; } = 1.18;
+        /// backdrop (1.0 = flat, no shadow). 1.35 verified as the smallest
+        /// lift that reads clearly at the default glyph size.</summary>
+        public double ZLift { get; set; } = 1.35;
 
         public class RainColors
         {

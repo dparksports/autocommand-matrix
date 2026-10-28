@@ -51,6 +51,12 @@ namespace AutoCommand.Matrix
         /// offset shadow that sells the elevation.</summary>
         public byte[][] ShadowLift;
 
+        /// <summary>Bloom: blurred, enlarged copies of the LEAD glyphs —
+        /// the glow halo. Only leads ever draw from these.</summary>
+        public bool HasBloom;
+        public int BloomCellW, BloomCellH;
+        public byte[][] HeadBloom, BlockedHeadBloom, RxBloom;
+
         /// <summary>Digits 0–9 for the column PID labels, per role
         /// (normal / blocked), indexed by digit value.</summary>
         public byte[][] LabelDigits, LabelDigitsBlocked;
@@ -111,7 +117,19 @@ namespace AutoCommand.Matrix
             atlas.BlockedLift = chars.Select(ch => RenderGlyph(typeface, emLift, ch.ToString(), c.Blocked, atlas.LiftCellW, atlas.LiftCellH)).ToArray();
             atlas.BlockedHeadLift = chars.Select(ch => RenderGlyph(typeface, emLift, ch.ToString(), c.BlockedHead, atlas.LiftCellW, atlas.LiftCellH)).ToArray();
             atlas.RxLift = chars.Select(ch => RenderGlyph(typeface, emLift, ch.ToString(), c.Rx, atlas.LiftCellW, atlas.LiftCellH)).ToArray();
-            atlas.ShadowLift = chars.Select(ch => RenderGlyph(typeface, emLift, ch.ToString(), "#000000", atlas.LiftCellW, atlas.LiftCellH, alpha: 140)).ToArray();
+            atlas.ShadowLift = chars.Select(ch => RenderGlyph(typeface, emLift, ch.ToString(), "#000000", atlas.LiftCellW, atlas.LiftCellH, alpha: 160)).ToArray();
+
+            // Bloom — only the lead glows: heavily blurred, enlarged copies
+            // of the head glyphs, dimmed to halo strength.
+            atlas.HasBloom = cfg.Bloom;
+            if (cfg.Bloom)
+            {
+                atlas.BloomCellW = (int)Math.Ceiling(atlas.LiftCellW * 1.55);
+                atlas.BloomCellH = (int)Math.Ceiling(atlas.LiftCellH * 1.55);
+                atlas.HeadBloom = chars.Select(ch => RenderHalo(typeface, emLift, ch.ToString(), c.Head, atlas.BloomCellW, atlas.BloomCellH)).ToArray();
+                atlas.BlockedHeadBloom = chars.Select(ch => RenderHalo(typeface, emLift, ch.ToString(), c.BlockedHead, atlas.BloomCellW, atlas.BloomCellH)).ToArray();
+                atlas.RxBloom = chars.Select(ch => RenderHalo(typeface, emLift, ch.ToString(), c.Rx, atlas.BloomCellW, atlas.BloomCellH)).ToArray();
+            }
 
             // The backdrop field, a touch smaller than the rain grid.
             atlas.Ambient = chars.Select(ch => RenderGlyph(typeface, em * 0.92, ch.ToString(), c.Ambient, atlas.CellW, atlas.CellH)).ToArray();
@@ -203,6 +221,79 @@ namespace AutoCommand.Matrix
             var buf = new byte[w * h * 4];
             rtb.CopyPixels(buf, w * 4, 0);
             return buf;
+        }
+
+        /// <summary>Soft glow copy of a glyph: rendered slightly larger,
+         /// blurred (separable box passes over the premultiplied bytes —
+         /// the correct way to filter Pbgra32), then dimmed to halo
+         /// strength.</summary>
+        private static byte[] RenderHalo(Typeface tf, double em, string text, string hexColor, int w, int h)
+        {
+            var color = (Color)ColorConverter.ConvertFromString(hexColor);
+            var ft = MakeText(tf, em * 1.1, text, color);
+            var visual = new DrawingVisual();
+            using (var dc = visual.RenderOpen())
+                dc.DrawText(ft, new Point((w - ft.Width) / 2.0, (h - ft.Height) / 2.0));
+            var rtb = new RenderTargetBitmap(w, h, 96, 96, PixelFormats.Pbgra32);
+            rtb.Render(visual);
+            rtb.Freeze();
+            var buf = new byte[w * h * 4];
+            rtb.CopyPixels(buf, w * 4, 0);
+
+            BoxBlur(buf, w, h, 2);
+            BoxBlur(buf, w, h, 2);
+            BoxBlur(buf, w, h, 2);
+
+            for (int i = 0; i < buf.Length; i += 4)
+            {
+                buf[i] = (byte)(buf[i] * 3 / 8);       // B
+                buf[i + 1] = (byte)(buf[i + 1] * 3 / 8); // G
+                buf[i + 2] = (byte)(buf[i + 2] * 3 / 8); // R
+                buf[i + 3] = (byte)(buf[i + 3] * 5 / 8); // A
+            }
+            return buf;
+        }
+
+        /// <summary>In-place separable box blur over premultiplied Pbgra32
+        /// bytes (build-time only — a few dozen small cells).</summary>
+        private static void BoxBlur(byte[] px, int w, int h, int r)
+        {
+            int stride = w * 4;
+            var tmp = new byte[px.Length];
+
+            for (int y = 0; y < h; y++)
+            {
+                int row = y * stride;
+                for (int x = 0; x < w; x++)
+                {
+                    int s0 = Math.Max(0, x - r), s1 = Math.Min(w - 1, x + r);
+                    int b0 = 0, b1 = 0, b2 = 0, b3 = 0, n = 0;
+                    for (int s = s0; s <= s1; s++)
+                    {
+                        int p = row + s * 4;
+                        b0 += px[p]; b1 += px[p + 1]; b2 += px[p + 2]; b3 += px[p + 3]; n++;
+                    }
+                    int t = row + x * 4;
+                    tmp[t] = (byte)(b0 / n); tmp[t + 1] = (byte)(b1 / n);
+                    tmp[t + 2] = (byte)(b2 / n); tmp[t + 3] = (byte)(b3 / n);
+                }
+            }
+            for (int x = 0; x < w; x++)
+            {
+                for (int y = 0; y < h; y++)
+                {
+                    int s0 = Math.Max(0, y - r), s1 = Math.Min(h - 1, y + r);
+                    int b0 = 0, b1 = 0, b2 = 0, b3 = 0, n = 0;
+                    for (int s = s0; s <= s1; s++)
+                    {
+                        int p = s * stride + x * 4;
+                        b0 += tmp[p]; b1 += tmp[p + 1]; b2 += tmp[p + 2]; b3 += tmp[p + 3]; n++;
+                    }
+                    int t = y * stride + x * 4;
+                    px[t] = (byte)(b0 / n); px[t + 1] = (byte)(b1 / n);
+                    px[t + 2] = (byte)(b2 / n); px[t + 3] = (byte)(b3 / n);
+                }
+            }
         }
 
         /// <summary>The falling alphabet. Named sets or a literal string of

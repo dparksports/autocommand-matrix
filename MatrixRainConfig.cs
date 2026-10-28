@@ -73,11 +73,23 @@ namespace AutoCommand.Matrix
         /// below 1.0 leaves breathing holes in the field.</summary>
         public double AmbientDensity { get; set; } = 0.9;
 
-        /// <summary>Pseudo-3D pop for the falling glyphs: they render at
-        /// this scale with a soft offset shadow, as if on a plane above the
-        /// backdrop (1.0 = flat, no shadow). 1.35 verified as the smallest
-        /// lift that reads clearly at the default glyph size.</summary>
-        public double ZLift { get; set; } = 1.35;
+        /// <summary>Pseudo-3D pop for the falling LEAD glyph — the only
+        /// elevated element: it renders at this scale with a soft offset
+        /// shadow above the backdrop, while its wake is etched into the
+        /// backdrop pixel-identical to the background characters (1.0 =
+        /// flat, no shadow).</summary>
+        public double ZLift { get; set; } = 1.5;
+
+        /// <summary>Glow halo around the falling LEAD glyph — the single
+        /// bloomed element; wake characters never bloom.</summary>
+        public bool Bloom { get; set; } = true;
+
+        /// <summary>Lifetime of a wake character behind the lead, fading
+        /// on a logarithmic curve — brightness holds high, then plunges:
+        /// a long silky tail rather than a quick exponential vanish. As
+        /// the fade completes it reveals the identical backdrop glyph
+        /// etched beneath.</summary>
+        public double WakeFadeSeconds { get; set; } = 2.0;
 
         public class RainColors
         {
@@ -150,7 +162,9 @@ namespace AutoCommand.Matrix
                     ["// lettersPerTransmit"] = "falling letters per TX packet (auto-scales down under load)",
                     ["// colors"] = "any #RRGGBB — head/trail/blocked/blockedHead/label/rx/ambient",
                     ["// ambient"] = "dim steady backdrop field behind the rain; ambientDriftSeconds = seconds per row, ambientDensity = fraction of cells filled",
-                    ["// zLift"] = "falling-glyph scale-up + soft shadow — the pop above the backdrop (1.0 = flat)"
+                    ["// zLift"] = "falling-glyph scale-up + soft shadow — the pop above the backdrop (1.0 = flat)",
+                    ["// bloom"] = "glow halo on the falling lead glyph only (the wake never blooms)",
+                    ["// wakeFadeSeconds"] = "wake character lifetime behind the lead, fading on a logarithmic curve"
                 };
                 var merged = new Dictionary<string, object>();
                 foreach (var kv in doc) merged[kv.Key] = kv.Value;
@@ -187,6 +201,7 @@ namespace AutoCommand.Matrix
             AmbientDriftSeconds = Math.Clamp(AmbientDriftSeconds, 0.5, 60.0);
             AmbientDensity = Math.Clamp(AmbientDensity, 0.1, 1.0);
             ZLift = Math.Clamp(ZLift, 1.0, 1.6);
+            WakeFadeSeconds = Math.Clamp(WakeFadeSeconds, 0.3, 10.0);
             if (string.IsNullOrWhiteSpace(FontFamily)) FontFamily = "Consolas";
             if (string.IsNullOrWhiteSpace(Charset)) Charset = "katakana-latin";
             Colors ??= new RainColors();
@@ -205,6 +220,7 @@ namespace AutoCommand.Matrix
                 || Ambient != other.Ambient
                 || Math.Abs(AmbientDensity - other.AmbientDensity) > 0.001
                 || Math.Abs(ZLift - other.ZLift) > 0.001
+                || Bloom != other.Bloom
                 || Colors.Head != other.Colors.Head
                 || Colors.Trail != other.Colors.Trail
                 || Colors.Blocked != other.Colors.Blocked

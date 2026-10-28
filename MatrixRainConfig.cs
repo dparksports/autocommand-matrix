@@ -66,19 +66,22 @@ namespace AutoCommand.Matrix
         /// drifting down much slower than the falling streams.</summary>
         public bool Ambient { get; set; } = true;
 
-        /// <summary>Seconds per row of backdrop drift (0.5–60).</summary>
-        public double AmbientDriftSeconds { get; set; } = 2.5;
+        /// <summary>Seconds per row of backdrop drift; 0 (the default)
+        /// FREEZES the backdrop — the background characters never change
+        /// on their own, and only falling wakes etch into them. That
+        /// stillness is the magic; drift is an opt-in flavor.</summary>
+        public double AmbientDriftSeconds { get; set; } = 0;
 
         /// <summary>Fraction of backdrop cells carrying a glyph (0.1–1.0);
         /// below 1.0 leaves breathing holes in the field.</summary>
         public double AmbientDensity { get; set; } = 0.9;
 
-        /// <summary>Pseudo-3D pop for the falling LEAD glyph — the only
-        /// elevated element: it renders at this scale with a soft offset
-        /// shadow above the backdrop, while its wake is etched into the
-        /// backdrop pixel-identical to the background characters (1.0 =
-        /// flat, no shadow).</summary>
-        public double ZLift { get; set; } = 1.5;
+        /// <summary>Pseudo-3D pop for the falling LEAD glyph — deliberately
+        /// SUBTLE by default (1.06): at a glance the lead reads the same
+        /// height as the background characters; watching carefully reveals
+        /// the slight scale, the faint shadow and the soft bloom. 1.0 =
+        /// flat, no shadow; up to 1.6 for a dramatic pop.</summary>
+        public double ZLift { get; set; } = 1.06;
 
         /// <summary>Glow halo around the falling LEAD glyph — the single
         /// bloomed element; wake characters never bloom.</summary>
@@ -90,6 +93,10 @@ namespace AutoCommand.Matrix
         /// the fade completes it reveals the identical backdrop glyph
         /// etched beneath.</summary>
         public double WakeFadeSeconds { get; set; } = 2.0;
+
+        /// <summary>Fall-speed ceiling in glyph rows per second (5–200).
+        /// Default 25 — the original 50 halved, per the house request.</summary>
+        public double FallRowsPerSecond { get; set; } = 25;
 
         public class RainColors
         {
@@ -161,10 +168,11 @@ namespace AutoCommand.Matrix
                     ["// charset"] = "katakana-latin | katakana | latin | digits — or a literal set of characters",
                     ["// lettersPerTransmit"] = "falling letters per TX packet (auto-scales down under load)",
                     ["// colors"] = "any #RRGGBB — head/trail/blocked/blockedHead/label/rx/ambient",
-                    ["// ambient"] = "dim steady backdrop field behind the rain; ambientDriftSeconds = seconds per row, ambientDensity = fraction of cells filled",
-                    ["// zLift"] = "falling-glyph scale-up + soft shadow — the pop above the backdrop (1.0 = flat)",
+                    ["// ambient"] = "dim backdrop field behind the rain, frozen by default (ambientDriftSeconds 0 = the background never changes on its own; only falling wakes etch into it)",
+                    ["// zLift"] = "subtle lead-glyph elevation (1.06 default - reads same-height as the background unless you watch carefully; 1.0 = flat, up to 1.6 = dramatic)",
                     ["// bloom"] = "glow halo on the falling lead glyph only (the wake never blooms)",
-                    ["// wakeFadeSeconds"] = "wake character lifetime behind the lead, fading on a logarithmic curve"
+                    ["// wakeFadeSeconds"] = "wake character lifetime behind the lead, fading on a logarithmic curve",
+                    ["// fallRowsPerSecond"] = "fall-speed ceiling in glyph rows per second (default 25 = the original 50 halved)"
                 };
                 var merged = new Dictionary<string, object>();
                 foreach (var kv in doc) merged[kv.Key] = kv.Value;
@@ -198,10 +206,11 @@ namespace AutoCommand.Matrix
             LettersPerTransmit = Math.Clamp(LettersPerTransmit, 0.05, 20.0);
             MaxColumns = Math.Clamp(MaxColumns, 4, 256);
             BlockPollSeconds = Math.Clamp(BlockPollSeconds, 10, 3600);
-            AmbientDriftSeconds = Math.Clamp(AmbientDriftSeconds, 0.5, 60.0);
+            AmbientDriftSeconds = Math.Clamp(AmbientDriftSeconds, 0.0, 60.0);
             AmbientDensity = Math.Clamp(AmbientDensity, 0.1, 1.0);
             ZLift = Math.Clamp(ZLift, 1.0, 1.6);
             WakeFadeSeconds = Math.Clamp(WakeFadeSeconds, 0.3, 10.0);
+            FallRowsPerSecond = Math.Clamp(FallRowsPerSecond, 5.0, 200.0);
             if (string.IsNullOrWhiteSpace(FontFamily)) FontFamily = "Consolas";
             if (string.IsNullOrWhiteSpace(Charset)) Charset = "katakana-latin";
             Colors ??= new RainColors();

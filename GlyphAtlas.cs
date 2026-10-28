@@ -117,22 +117,23 @@ namespace AutoCommand.Matrix
             atlas.BlockedLift = chars.Select(ch => RenderGlyph(typeface, emLift, ch.ToString(), c.Blocked, atlas.LiftCellW, atlas.LiftCellH)).ToArray();
             atlas.BlockedHeadLift = chars.Select(ch => RenderGlyph(typeface, emLift, ch.ToString(), c.BlockedHead, atlas.LiftCellW, atlas.LiftCellH)).ToArray();
             atlas.RxLift = chars.Select(ch => RenderGlyph(typeface, emLift, ch.ToString(), c.Rx, atlas.LiftCellW, atlas.LiftCellH)).ToArray();
-            atlas.ShadowLift = chars.Select(ch => RenderGlyph(typeface, emLift, ch.ToString(), "#000000", atlas.LiftCellW, atlas.LiftCellH, alpha: 160)).ToArray();
+            atlas.ShadowLift = chars.Select(ch => RenderGlyph(typeface, emLift, ch.ToString(), "#000000", atlas.LiftCellW, atlas.LiftCellH, alpha: 90)).ToArray();
 
-            // Bloom — only the lead glows: heavily blurred, enlarged copies
-            // of the head glyphs, dimmed to halo strength.
+            // Bloom — only the lead glows: blurred, enlarged copies of the
+            // head glyphs, dimmed to a soft halo strength.
             atlas.HasBloom = cfg.Bloom;
             if (cfg.Bloom)
             {
-                atlas.BloomCellW = (int)Math.Ceiling(atlas.LiftCellW * 1.55);
-                atlas.BloomCellH = (int)Math.Ceiling(atlas.LiftCellH * 1.55);
+                atlas.BloomCellW = (int)Math.Ceiling(atlas.LiftCellW * 1.3);
+                atlas.BloomCellH = (int)Math.Ceiling(atlas.LiftCellH * 1.3);
                 atlas.HeadBloom = chars.Select(ch => RenderHalo(typeface, emLift, ch.ToString(), c.Head, atlas.BloomCellW, atlas.BloomCellH)).ToArray();
                 atlas.BlockedHeadBloom = chars.Select(ch => RenderHalo(typeface, emLift, ch.ToString(), c.BlockedHead, atlas.BloomCellW, atlas.BloomCellH)).ToArray();
                 atlas.RxBloom = chars.Select(ch => RenderHalo(typeface, emLift, ch.ToString(), c.Rx, atlas.BloomCellW, atlas.BloomCellH)).ToArray();
             }
 
-            // The backdrop field, a touch smaller than the rain grid.
-            atlas.Ambient = chars.Select(ch => RenderGlyph(typeface, em * 0.92, ch.ToString(), c.Ambient, atlas.CellW, atlas.CellH)).ToArray();
+            // The backdrop field, at the same em as the wake glyphs — the
+            // lead (a hair larger via zLift) reads same-height at a glance.
+            atlas.Ambient = chars.Select(ch => RenderGlyph(typeface, em, ch.ToString(), c.Ambient, atlas.CellW, atlas.CellH)).ToArray();
 
             return atlas;
         }
@@ -246,10 +247,10 @@ namespace AutoCommand.Matrix
 
             for (int i = 0; i < buf.Length; i += 4)
             {
-                buf[i] = (byte)(buf[i] * 3 / 8);       // B
-                buf[i + 1] = (byte)(buf[i + 1] * 3 / 8); // G
-                buf[i + 2] = (byte)(buf[i + 2] * 3 / 8); // R
-                buf[i + 3] = (byte)(buf[i + 3] * 5 / 8); // A
+                buf[i] = (byte)(buf[i] * 2 / 8);       // B
+                buf[i + 1] = (byte)(buf[i + 1] * 2 / 8); // G
+                buf[i + 2] = (byte)(buf[i + 2] * 2 / 8); // R
+                buf[i + 3] = (byte)(buf[i + 3] * 4 / 8); // A
             }
             return buf;
         }

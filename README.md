@@ -32,16 +32,22 @@ pinned as a git submodule — but rains them down your screen instead:
   whole desktop only if you explicitly tell it to.
 - **Your colors, your font** — the glyph palette and typeface are plain JSON
   beside the exe; point it at any installed font or your own `.ttf`/`.otf`.
-- **A quiet backdrop under the rain** — a dim field of ambient glyphs at a
-  steady brightness (its layer is never touched by the trail fade), easing
-  down the pane far slower than any falling stream.
-- **Only the lead blooms; the wake fades in log** — each falling stream is
-  a single bright lead glyph (affine `zLift` scale-up, soft shadow, and a
-  blurred glow halo — the one bloomed element) trailed by the characters it
-  has passed, each decaying on a logarithmic curve: brightness holds high
-  (~73% at half-life) then plunges, a long silky tail rather than a quick
-  exponential vanish. As a wake character finishes fading it resolves into
-  the identical backdrop glyph etched beneath it.
+- **A frozen backdrop under the rain** — a dim field of ambient glyphs at a
+  steady brightness that never changes on its own; the only backdrop edits
+  are real ones, characters the falling wakes etch in as they pass.
+  (Opt-in drift eases the field downward, off by default.)
+- **Columns slide, they don't pop** — a new PID's column slides out from
+  the docked edge into place, and activity re-ranking glides columns
+  between slots instead of teleporting them.
+- **Only the lead blooms; the wake fades in log; the z-lift is subtle** —
+  each falling stream is a single bright lead glyph with a soft glow, at a
+  hair over background height (`zLift` 1.06: it reads same-size at a
+  glance — watch carefully to catch the slight scale, faint shadow and
+  bloom), trailed by the characters it has passed, each decaying on a
+  logarithmic curve: brightness holds high (~73% at half-life) then
+  plunges, a long silky tail rather than a quick exponential vanish. As a
+  wake character finishes fading it resolves into the identical backdrop
+  glyph etched beneath it.
 - **Hover a column** (when click-through is off) for the story: process
   name, tx/rx counters, tracked connections, block state.
 
@@ -108,11 +114,12 @@ font or colors while it's raining and watch it re-skin live.
   "showLabels": true,
   "rxMode": false,
   "ambient": true,
-  "ambientDriftSeconds": 2.5,
+  "ambientDriftSeconds": 0,
   "ambientDensity": 0.9,
-  "zLift": 1.5,
+  "zLift": 1.06,
   "bloom": true,
-  "wakeFadeSeconds": 2.0
+  "wakeFadeSeconds": 2.0,
+  "fallRowsPerSecond": 25
 }
 ```
 
@@ -136,11 +143,12 @@ font or colors while it's raining and watch it re-skin live.
 | `showLabels` | the vertical PID digits atop each column |
 | `rxMode` | also rain on receives |
 | `ambient` | dim backdrop glyph field behind the rain, steady brightness |
-| `ambientDriftSeconds` | seconds per backdrop row drift (the "slower" layer) |
+| `ambientDriftSeconds` | seconds per backdrop row drift — 0 (default) freezes the backdrop; only falling wakes change it |
 | `ambientDensity` | fraction of backdrop cells carrying a glyph |
-| `zLift` | lead-glyph scale-up + shadow — the lone elevated element; the wake is etched into the backdrop (1.0 = flat) |
+| `zLift` | lead-glyph elevation — subtle by default (1.06): same height as the background unless you watch carefully (1.0 = flat, up to 1.6 = dramatic) |
 | `bloom` | glow halo on the falling lead glyph only — the wake never blooms |
 | `wakeFadeSeconds` | wake-character lifetime behind the lead, fading on a logarithmic curve |
+| `fallRowsPerSecond` | fall-speed ceiling in glyph rows per second (default 25 = the original 50 halved) |
 | `colors.ambient` | the backdrop glyph color |
 
 Blocked-state changes can lag the firewall by up to `blockPollSeconds`
@@ -152,7 +160,7 @@ Blocked-state changes can lag the firewall by up to `blockPollSeconds`
 |---|---|
 | a column appears | a process PID opened a tracked network connection (Sysmon event, or the boot baseline snapshot) |
 | letters fall | that PID transmitted packets — one glyph per transmit |
-| where a column sits | edge-anchored activity ranking — the busiest PID's column hugs the edge the pane is docked against (rightmost when docked right, leftmost when docked left), re-ranked every ~2 s |
+| where a column sits | edge-anchored activity ranking — the busiest PID's column hugs the edge the pane is docked against (rightmost when docked right, leftmost when docked left), re-ranked every ~2 s; new columns slide out from the docked edge, re-ranks glide |
 | column goes red | the firewall inventory says that PID's traffic (its process path or remote IP) is blocked |
 | red letters keep falling | the blocked process is *still trying* — each new connection attempt rolls a glyph |
 | a column stills and fades | the process went quiet (or exited) |

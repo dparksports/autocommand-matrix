@@ -31,7 +31,9 @@ jobs:
         shell: pwsh
         run: |
           $tag = "${{ github.ref_name }}"
-          $actual = (Get-Item publish/AutoCommand.Matrix.exe).VersionInfo.ProductVersion
+          # CI builds append "+<commit sha>" (SourceRevisionId) to the
+          # informational version — compare the semver part only.
+          $actual = (Get-Item publish/AutoCommand.Matrix.exe).VersionInfo.ProductVersion.Split('+')[0]
           if ("v$actual" -ne $tag) {
             throw "tag $tag does not match csproj version $actual — bump <Version> in AutoCommand.Matrix.csproj"
           }

@@ -2,6 +2,8 @@
 
 **The holiday-edition process monitor: your PC's network traffic as Matrix rain.**
 
+![The rain, decoded](Assets/infographic-overview.png)
+
 AutoCommand's Process Monitor shows one boring row per (process → remote IP)
 conversation. This overlay runs the same engines — the UI-free core
 libraries of [AutoCommand II](https://github.com/dparksports/autocommand-ii),
@@ -85,6 +87,8 @@ the right edge of the desktop.
 | Exit | quit (Alt-F4 merely hides to tray) |
 
 ## Configuration — `matrix_rain.json`
+
+![Make it yours](Assets/infographic-config.png)
 
 Written beside the exe on first run, re-read on every save — change the
 font or colors while it's raining and watch it re-skin live.
@@ -203,6 +207,8 @@ a local raw socket, and the firewall's block inventory. Nothing leaves the
 machine.
 
 ## Relation to AutoCommand
+
+![One engine, many faces](Assets/infographic-architecture.png)
 
 This is a standalone face over the
 [AutoCommand II](https://github.com/dparksports/autocommand-ii) core

@@ -51,8 +51,17 @@ jobs:
         run: |
           $tag = "${{ github.ref_name }}"
           $ver = $tag.Substring(1)
-          gh release create $tag `
-            "AutoCommand-Matrix-v$ver-win-x64.zip" `
-            SHA256SUMS.txt `
-            --title "AutoCommand Matrix v$ver" `
-            --notes "Holiday-edition Matrix-rain process monitor — one rain column per process PID, falling letters are transmits, blocked PIDs rain red. Self-contained win-x64; right-click the tray icon to dock, click-through, or restyle. See the README for the matrix_rain.json knobs."
+          $notes = "release_notes_v$ver.md"
+          if (Test-Path $notes) {
+            gh release create $tag `
+              "AutoCommand-Matrix-v$ver-win-x64.zip" `
+              SHA256SUMS.txt `
+              --title "AutoCommand Matrix v$ver" `
+              --notes-file $notes
+          } else {
+            gh release create $tag `
+              "AutoCommand-Matrix-v$ver-win-x64.zip" `
+              SHA256SUMS.txt `
+              --title "AutoCommand Matrix v$ver" `
+              --notes "Holiday-edition Matrix-rain process monitor - one rain column per process PID, falling letters are transmits, blocked PIDs rain red. Self-contained win-x64; right-click the tray icon to dock, click-through, or restyle. See the README for the matrix_rain.json knobs."
+          }

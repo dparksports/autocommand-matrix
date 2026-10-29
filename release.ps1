@@ -38,7 +38,7 @@ $hash = (Get-FileHash $zip -Algorithm SHA256).Hash
 Write-Host "== packaged $zip ($([math]::Round((Get-Item $zip).Length / 1MB, 1)) MB)"
 
 # ---- release -------------------------------------------------------------
-if (-not (Test-Path "release_notes_$ver.md")) { throw "no release_notes_$ver.md - write the notes first" }
-gh release create $tag $zip SHA256SUMS.txt --title "AutoCommand Matrix $ver" --notes-file "release_notes_$ver.md"
+if (-not (Test-Path "release_notes_v$ver.md")) { throw "no release_notes_v$ver.md - write the notes first" }
+gh release create $tag $zip SHA256SUMS.txt --title "AutoCommand Matrix $ver" --notes-file "release_notes_v$ver.md"
 if ($LASTEXITCODE -ne 0) { throw "gh release create failed (tag pushed? exists already?)" }
 Write-Host "== released: https://github.com/dparksports/autocommand-matrix/releases/tag/$tag"

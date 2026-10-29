@@ -6,3 +6,5 @@ publish/
 .vs/
 matrix_rain.json
 matrix_rain_window.json
+*.zip
+SHA256SUMS.txt

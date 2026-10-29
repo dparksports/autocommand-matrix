@@ -94,14 +94,15 @@ namespace AutoCommand.Matrix
         /// bloomed element; wake characters never bloom.</summary>
         public bool Bloom { get; set; } = true;
 
-        /// <summary>Lifetime of a wake character behind the lead, fading
-        /// on a logarithmic curve — brightness holds high, then plunges:
-        /// a long silky tail rather than a quick exponential vanish. As
-        /// the fade completes it reveals the identical backdrop glyph
-        /// etched beneath.</summary>
+        /// <summary>Trail length in CHARACTERS behind the lead (clamped
+        /// 8–80): wakeFadeSeconds x fallRowsPerSecond. The trailing
+        /// characters share the lead's brightness family, each one log-step
+        /// dimmer by distance — never by time, so idle streams freeze
+        /// mid-fall instead of dissolving.</summary>
         public double WakeFadeSeconds { get; set; } = 2.0;
 
-        /// <summary>Fall-speed ceiling in glyph rows per second (5–200).
+        /// <summary>Fall-speed ceiling in glyph rows per second (5–200),
+        /// also adjustable live from the tray (Fall slower / faster).
         /// Default 25 — the original 50 halved, per the house request.</summary>
         public double FallRowsPerSecond { get; set; } = 25;
 

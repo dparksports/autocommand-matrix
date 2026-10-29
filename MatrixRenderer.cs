@@ -24,14 +24,16 @@ namespace AutoCommand.Matrix
         public bool Rx;
     }
 
-    /// <summary>One character behind a lead: its grid row, its glyph, its
-    /// birth time. Rendered every frame at the log-curve alpha, over the
-    /// identical backdrop glyph etched beneath, until the fade completes.</summary>
+    /// <summary>One character behind a lead: its grid row, its glyph, and
+    /// its current brightness. Brightness is stepped by DISTANCE behind the
+    /// lead (same color family as the lead, one log-step dimmer per
+    /// character) — never by time, so an idle stream freezes in place,
+    /// animating only when events move it.</summary>
     internal sealed class WakeCell
     {
         public int Row;
         public int Glyph;
-        public double BornSec;
+        public double Alpha;    // 0..1, recomputed while a lead anchors it
         public bool Rx;
     }
 
@@ -114,11 +116,18 @@ namespace AutoCommand.Matrix
         private const double ActivityDecayPerSnapshot = 0.97;  // ~2.3 s half-life at 100 ms snapshots
         private const double ResortSeconds = 2.0;
 
-        // Log-fade curve: F(age) = ln(1 + k(T-age)) / ln(9), with k*T == 8
-        // so the SHAPE is constant whatever the configured lifetime —
-        // ~73% brightness at half-life, plunging to zero at the end.
+        // Log-fade curve over TRAIL DISTANCE: F(d) = ln(1 + k(D-d))/ln(9),
+        // with k*D == 8 so the shape is constant whatever the length — the
+        // char right behind the lead is ~full lead brightness, each further
+        // character one log-step dimmer, gone at distance D.
         private const double WakeDenom = 1.0 / 2.1972245773362196;   // 1/ln(9)
-        private double _wakeCurveK = 4.0;                            // 8 / wakeFadeSeconds
+        private double _wakeCharLength = 40;                          // D = wakeFadeSeconds x fallRowsPerSecond
+        private double _wakeCurveK = 8.0 / 40;                        // 8 / D
+
+        // Animation is EVENT-DRIVEN: re-ranking happens only after real
+        // events (traffic, attempts, arrivals, retirements) — never on a
+        // timer over decayed scores, which made idle columns shift.
+        private bool _rankDirty;
 
         private bool _rainClearPending;   // full rain-layer reset (atlas rebuild, column retirement)
 
@@ -144,7 +153,10 @@ namespace AutoCommand.Matrix
                 // Cell metrics changed — stale pixels would smear; reset.
                 _rainClearPending = true;
             }
-            _wakeCurveK = 8.0 / Math.Clamp(cfg.WakeFadeSeconds, 0.3, 10.0);
+            // Trail length in characters: the configured wake lifetime at
+            // the current fall speed.
+            _wakeCharLength = Math.Clamp(cfg.WakeFadeSeconds * cfg.FallRowsPerSecond, 8, 80);
+            _wakeCurveK = 8.0 / _wakeCharLength;
             RecomputeGrid();
         }
 
@@ -251,14 +263,16 @@ namespace AutoCommand.Matrix
                 if (_cfg.ShowLabels)
                     unsafe { new Span<byte>((void*)_bmp.BackBuffer, _bandH * stride).Clear(); }
 
-                // Re-rank every couple of seconds — often enough to track
-                // who's talking, rarely enough that heads don't hop columns
-                // constantly. LINQ's OrderBy is stable, so ranking ties
-                // keep their previous order.
+                // Re-rank only after REAL events (traffic, attempts,
+                // arrivals, retirements) — an idle pane is a still pane;
+                // decayed scores never shuffle columns on their own. The
+                // 2 s cadence just paces how promptly event-driven
+                // promotions animate.
                 _resortAccumSec += dt;
-                if (_orderedColumns.Count == 0 || _resortAccumSec >= ResortSeconds)
+                if (_orderedColumns.Count == 0 || (_rankDirty && _resortAccumSec >= ResortSeconds))
                 {
                     _resortAccumSec = 0;
+                    _rankDirty = false;
                     _orderedColumns = _columns.Values
                         .OrderByDescending(c => c.Activity)
                         .ThenBy(c => c.Seq)
@@ -303,7 +317,7 @@ namespace AutoCommand.Matrix
 
                     if (_cfg.ShowLabels) DrawPidLabel(col, stride);
                     StepColumn(col, dt);
-                    RenderColumn(col, now);
+                    RenderColumn(col);
                 }
 
                 _bmp.AddDirtyRect(new Int32Rect(0, 0, _w, _h));
@@ -470,6 +484,7 @@ namespace AutoCommand.Matrix
                             continue; // everyone is busy — the PID gets no column yet
                         _columns.Remove(stalest.Pid);
                         _rainClearPending = true;
+                        _rankDirty = true;
                     }
                     col = new RainColumn
                     {
@@ -480,6 +495,7 @@ namespace AutoCommand.Matrix
                     };
                     _columns[p.Pid] = col;
                     _orderedColumns.Add(col);   // ranked properly at the next re-sort
+                    _rankDirty = true;
                 }
 
                 col.Name = p.Name;
@@ -495,10 +511,12 @@ namespace AutoCommand.Matrix
 
                 // Edge-anchored ranking: recent transmits (and, for blocked
                 // PIDs, connection attempts) on a decaying score — the
-                // busiest column lives at the docked edge.
+                // busiest column lives at the docked edge. Only real events
+                // dirty the ranking.
                 col.Activity = col.Activity * ActivityDecayPerSnapshot
                              + Math.Max(0, dTx)
                              + (p.Blocked ? p.Attempts : 0);
+                if (dTx > 0 || p.Attempts > 0) _rankDirty = true;
 
                 if (dTx > 0) col.Budget = Math.Min(col.Budget + dTx * _cfg.LettersPerTransmit, 600);
                 if (dRx > 0 && _cfg.RxMode) col.RxBudget = Math.Min(col.RxBudget + dRx * _cfg.LettersPerTransmit, 600);
@@ -527,6 +545,7 @@ namespace AutoCommand.Matrix
                 {
                     _columns.Remove(pid);
                     _rainClearPending = true;
+                    _rankDirty = true;
                 }
             }
         }
@@ -555,23 +574,15 @@ namespace AutoCommand.Matrix
 
         private void StepColumn(RainColumn col, double dt)
         {
-            var now = DateTime.UtcNow;
+            // No synthetic animation: blocked-but-silent columns simply ARE
+            // (red label, frozen stream) — they animate again on real
+            // connection attempts. Easing of an event's slide continues:
 
             // Entrance / re-rank glide: ease the slide toward rest.
             if (col.XOffset != 0)
             {
                 col.XOffset *= Math.Exp(-dt * 6.0);
                 if (Math.Abs(col.XOffset) < 0.75) col.XOffset = 0;
-            }
-
-            // A blocked PID stays visible even when silent: a slow red
-            // heartbeat — a single letter every few seconds.
-            if (col.Blocked && !col.Exited &&
-                (now - col.LastActivityUtc).TotalSeconds > 4.0 &&
-                (now - col.LastHeartbeatUtc).TotalSeconds > 4.0)
-            {
-                col.Budget = Math.Max(col.Budget, 1.0);
-                col.LastHeartbeatUtc = now;
             }
 
             if (!col.Exited)
@@ -626,7 +637,6 @@ namespace AutoCommand.Matrix
                         {
                             Row = lead.Row,
                             Glyph = lead.GlyphIndex,
-                            BornSec = _clock.Elapsed.TotalSeconds,
                             Rx = rx
                         });
                     }
@@ -660,13 +670,18 @@ namespace AutoCommand.Matrix
         // Per-column rendering: log-fading wake, bloomed lead
         // ------------------------------------------------------------------
 
-        /// <summary>Logarithmic wake fade — the wake STARTS at the lead's
-        /// brightness (same head color, alpha capped a hair under full so
-        /// the lead is still strictly brightest) and decays on a curve that
-        /// holds high, then plunges (≈73% at half-life).</summary>
-        private double WakeAlpha(double age, double lifetime)
+        /// <summary>Incremental dimming by TRAIL DISTANCE — the character
+        /// right behind the lead is ~full lead brightness (same color
+        /// family, capped a hair under so the lead stays strictly
+        /// brightest), each further character one log-step dimmer, gone at
+        /// the trail length. No time decay: idle streams freeze in place
+        /// and animate only when events move them.</summary>
+        private double WakeAlphaByDistance(int dist)
         {
-            double f = Math.Log(1 + _wakeCurveK * (lifetime - age)) * WakeDenom;
+            double d = _wakeCharLength;
+            if (dist < 0) dist = 0;
+            if (dist >= d) return 0;
+            double f = Math.Log(1 + _wakeCurveK * (d - dist)) * WakeDenom;
             return Math.Clamp(f, 0, 1) * (248.0 / 256.0);
         }
 
@@ -675,43 +690,57 @@ namespace AutoCommand.Matrix
         private int ColumnX(RainColumn col) =>
             col.Slot * _atlas.CellW + (int)Math.Round(col.XOffset);
 
-        private unsafe void RenderColumn(RainColumn col, double nowSec)
+        private unsafe void RenderColumn(RainColumn col)
         {
             byte* dstBase = (byte*)_bmp.BackBuffer;
             int stride = _bmp.BackBufferStride;
-            double lifetime = Math.Clamp(_cfg.WakeFadeSeconds, 0.3, 10.0);
 
             int xNow = ColumnX(col);
             int xPrev = col.LastDrawnX == double.MinValue ? xNow : (int)col.LastDrawnX;
             bool moved = xNow != xPrev;
 
-            // The wake: each character the lead has passed, fading in log
-            // over the identical backdrop glyph etched beneath it. While
-            // the column glides, its previous position is cleared too.
+            // The lead row of each color anchors its wake's distances; with
+            // no lead (idle stream) the staircase freezes where it was.
+            int leadTx = -1, leadRx = -1;
+            for (int i = 0; i < col.Drops.Count; i++)
+            {
+                var d = col.Drops[i];
+                if (d.Row < 0) continue;
+                if (d.Rx) { if (d.Row > leadRx) leadRx = d.Row; }
+                else { if (d.Row > leadTx) leadTx = d.Row; }
+            }
+
+            // The wake: characters behind the lead — same brightness family
+            // as the lead, dimmer incrementally by distance — drawn over the
+            // identical (dim) backdrop glyph etched beneath. While the
+            // column glides, its previous position is cleared too.
             for (int i = col.Wake.Count - 1; i >= 0; i--)
             {
                 var w = col.Wake[i];
-                double age = nowSec - w.BornSec;
                 int y = _bandH + w.Row * _atlas.CellH;
-                int alpha = (age < 0 || age >= lifetime || w.Row < 0 || w.Row >= _gridRows)
-                    ? 0 : (int)(256 * WakeAlpha(age, lifetime));
+
+                int anchor = w.Rx ? leadRx : leadTx;
+                if (anchor >= 0)
+                {
+                    int dist = anchor - w.Row;
+                    if (dist > _wakeCharLength || w.Row < 0 || w.Row >= _gridRows)
+                    {
+                        if (moved)
+                            ClearCell(dstBase, stride, xPrev, y, _atlas.CellW, _atlas.CellH);
+                        ClearCell(dstBase, stride, xNow, y, _atlas.CellW, _atlas.CellH);
+                        col.Wake.RemoveAt(i);
+                        continue;
+                    }
+                    w.Alpha = WakeAlphaByDistance(dist);
+                }
+
+                var set = w.Rx ? _atlas.Rx : col.Blocked ? _atlas.BlockedHead : _atlas.Head;
                 if (moved)
                     ClearCell(dstBase, stride, xPrev, y, _atlas.CellW, _atlas.CellH);
-                if (alpha <= 0)
-                {
-                    ClearCell(dstBase, stride, xNow, y, _atlas.CellW, _atlas.CellH);
-                    col.Wake.RemoveAt(i);
-                    continue;
-                }
-                // The wake starts AT THE LEAD'S BRIGHTNESS — head-colored
-                // glyphs fading as subsequent characters — over the identical
-                // (dim) backdrop glyph etched beneath, so the completed fade
-                // resolves into a background character.
-                var set = w.Rx ? _atlas.Rx : col.Blocked ? _atlas.BlockedHead : _atlas.Head;
                 ClearCell(dstBase, stride, xNow, y, _atlas.CellW, _atlas.CellH);
-                if (xNow >= 0 && xNow + _atlas.CellW <= _w)
+                if (xNow >= 0 && xNow + _atlas.CellW <= _w && w.Alpha > 0.004)
                     BlitClipped(dstBase, stride, set[w.Glyph], _atlas.CellW, _atlas.CellH,
-                        xNow, y, _w, _h, alpha);
+                        xNow, y, _w, _h, (int)(256 * w.Alpha));
             }
 
             // The lead(s): shadow, soft bloom, the single brightest glyph —

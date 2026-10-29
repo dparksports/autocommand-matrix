@@ -23,7 +23,7 @@ namespace AutoCommand.Matrix
         private readonly MainWindow _window;
         private IntPtr _hIcon = IntPtr.Zero;
         private readonly WinForms.ToolStripMenuItem _dockLeft, _dockRight, _dockFull, _dockManual;
-        private readonly WinForms.ToolStripMenuItem _clickThroughItem, _labelsItem, _rxItem, _desktopItem;
+        private readonly WinForms.ToolStripMenuItem _clickThroughItem, _labelsItem, _rxItem, _desktopItem, _speedItem;
         private DateTime _lastBalloonUtc = DateTime.MinValue;
 
         public TrayIcon(Func<MatrixRainConfig> cfg, MainWindow window)
@@ -65,6 +65,12 @@ namespace AutoCommand.Matrix
             menu.Items.Add(_rxItem);
             menu.Items.Add(new WinForms.ToolStripSeparator());
 
+            _speedItem = new WinForms.ToolStripMenuItem("Fall speed") { Enabled = false };
+            menu.Items.Add(_speedItem);
+            menu.Items.Add(Item("Fall slower", () => AdjustSpeed(0.75)));
+            menu.Items.Add(Item("Fall faster", () => AdjustSpeed(4.0 / 3.0)));
+            menu.Items.Add(new WinForms.ToolStripSeparator());
+
             menu.Items.Add(Item("Edit matrix_rain.json", EditConfig));
             menu.Items.Add(Item("Reload config", ReloadConfig));
             menu.Items.Add(new WinForms.ToolStripSeparator());
@@ -92,6 +98,18 @@ namespace AutoCommand.Matrix
         {
             var cfg = _cfg();
             mutate(cfg);
+            SaveAndApply(cfg);
+        }
+
+        /// <summary>Fall speed in glyph rows/sec, nudged multiplicatively
+        /// (slower x0.75, faster x4/3) and clamped to the config range —
+        /// saved and hot-applied, and the wake length follows it (the
+        /// trail is measured in characters, not seconds).</summary>
+        private void AdjustSpeed(double factor)
+        {
+            var cfg = _cfg();
+            cfg.FallRowsPerSecond = Math.Max(5.0, Math.Min(200.0,
+                Math.Round(cfg.FallRowsPerSecond * factor, 1)));
             SaveAndApply(cfg);
         }
 
@@ -137,6 +155,7 @@ namespace AutoCommand.Matrix
             _labelsItem.Checked = cfg.ShowLabels;
             _rxItem.Checked = cfg.RxMode;
             _desktopItem.Checked = cfg.Surface == "desktop";
+            _speedItem.Text = $"Fall speed: {cfg.FallRowsPerSecond:0.#} rows/s";
         }
 
         /// <summary>Engine status → balloon, rate-limited so a flapping

@@ -85,6 +85,7 @@ the right edge of the desktop.
 | Click-through | the overlay ignores the mouse entirely (tooltips off too) |
 | PID labels | show/hide the per-column PID digits |
 | Rain on receives too | also rain (in blue) on inbound packets |
+| Fall slower / Fall faster | nudge the fall speed live (×0.75 / ×1.33, saved to `fallRowsPerSecond`) |
 | Edit matrix_rain.json | open the config in Notepad — save and it hot-applies |
 | Reload config | re-read the file now |
 | Exit | quit (Alt-F4 merely hides to tray) |
@@ -156,8 +157,8 @@ font or colors while it's raining and watch it re-skin live.
 | `ambientDensity` | fraction of backdrop cells carrying a glyph |
 | `zLift` | lead-glyph elevation — subtle by default (1.06): same height as the background unless you watch carefully (1.0 = flat, up to 1.6 = dramatic) |
 | `bloom` | glow halo on the falling lead glyph only — the wake never blooms |
-| `wakeFadeSeconds` | wake-character lifetime behind the lead, fading on a logarithmic curve |
-| `fallRowsPerSecond` | fall-speed ceiling in glyph rows per second (default 25 = the original 50 halved) |
+| `wakeFadeSeconds` | trail length in characters behind the lead (× fallRowsPerSecond, clamped 8–80) — trailing characters share the lead's brightness, dimmer incrementally by distance |
+| `fallRowsPerSecond` | fall-speed ceiling in glyph rows per second — also adjustable live from the tray (Fall slower / faster) |
 | `colors.ambient` | the backdrop glyph color |
 
 Blocked-state changes can lag the firewall by up to `blockPollSeconds`

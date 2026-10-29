@@ -44,9 +44,11 @@ namespace AutoCommand.Matrix
         /// <summary>Glyph cell font size in DIPs.</summary>
         public int FontSizePx { get; set; } = 18;
 
-        /// <summary>katakana-latin | katakana | latin | digits, or a literal
-        /// string of characters to rain.</summary>
-        public string Charset { get; set; } = "katakana-latin";
+        /// <summary>katakana (default — katakana + machine symbols, no
+        /// roman letters or digits: a field foreign to humankind) |
+        /// katakana-latin | latin | digits, or a literal string of
+        /// characters to rain.</summary>
+        public string Charset { get; set; } = "katakana";
 
         public RainColors Colors { get; set; } = new RainColors();
 
@@ -174,7 +176,7 @@ namespace AutoCommand.Matrix
                     ["// dock"] = "left | right | full (whole screen, explicit) | manual (position below)",
                     ["// surface"] = "desktop = behind app windows, over the wallpaper (default) | overlay = above everything",
                     ["// fontFile"] = "optional absolute path to a .ttf/.otf — overrides fontFamily",
-                    ["// charset"] = "katakana-latin | katakana | latin | digits — or a literal set of characters",
+                    ["// charset"] = "katakana (default - no roman letters or digits, a field foreign to humankind) | katakana-latin | latin | digits - or a literal set of characters",
                     ["// lettersPerTransmit"] = "falling letters per TX packet (auto-scales down under load)",
                     ["// colors"] = "any #RRGGBB — head/trail/blocked/blockedHead/label/rx/ambient",
                     ["// ambient"] = "dim backdrop field behind the rain, frozen by default (ambientDriftSeconds 0 = the background never changes on its own; only falling wakes etch into it)",
@@ -222,7 +224,7 @@ namespace AutoCommand.Matrix
             WakeFadeSeconds = Math.Clamp(WakeFadeSeconds, 0.3, 10.0);
             FallRowsPerSecond = Math.Clamp(FallRowsPerSecond, 5.0, 200.0);
             if (string.IsNullOrWhiteSpace(FontFamily)) FontFamily = "Consolas";
-            if (string.IsNullOrWhiteSpace(Charset)) Charset = "katakana-latin";
+            if (string.IsNullOrWhiteSpace(Charset)) Charset = "katakana";
             Colors ??= new RainColors();
         }
 

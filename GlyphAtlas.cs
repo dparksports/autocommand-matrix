@@ -297,8 +297,11 @@ namespace AutoCommand.Matrix
             }
         }
 
-        /// <summary>The falling alphabet. Named sets or a literal string of
-        /// characters (≥4, no spaces) for a custom alphabet.</summary>
+        /// <summary>The falling alphabet. The default is katakana plus a
+        /// few machine symbols — no roman letters, no digits: the field
+        /// should read as something not made for human eyes. Named sets or
+        /// a literal string of characters (≥4, no spaces) for a custom
+        /// alphabet.</summary>
         private static string CharsetFor(string spec)
         {
             const string latin = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
@@ -309,15 +312,17 @@ namespace AutoCommand.Matrix
 
             switch ((spec ?? "").Trim().ToLowerInvariant())
             {
-                case "katakana": return Dedupe(katakana + latin + digits);
+                case "katakana-latin": return Dedupe(katakana + latin + digits + symbols);
                 case "latin": return Dedupe(latin + digits + symbols);
                 case "digits": return digits;
                 case "":
-                case "katakana-latin": return Dedupe(katakana + latin + digits + symbols);
+                case "katakana":
                 default:
-                    string trimmed = spec.Trim();
-                    if (trimmed.Length >= 4 && !trimmed.Contains(' ')) return Dedupe(trimmed);
-                    return Dedupe(katakana + latin + digits + symbols);
+                    string trimmed = (spec ?? "").Trim();
+                    if (trimmed.Length >= 4 && !trimmed.Contains(' ') &&
+                        trimmed.ToLowerInvariant() != "katakana-latin")
+                        return Dedupe(trimmed);
+                    return Dedupe(katakana + symbols);   // the alien default
             }
         }
 

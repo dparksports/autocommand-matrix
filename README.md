@@ -107,7 +107,7 @@ font or colors while it's raining and watch it re-skin live.
   "fontFamily": "Consolas",
   "fontFile": "",
   "fontSizePx": 18,
-  "charset": "katakana-latin",
+  "charset": "katakana",
   "colors": {
     "head": "#E8FFE8",
     "trail": "#00FF41",
@@ -142,7 +142,7 @@ font or colors while it's raining and watch it re-skin live.
 | `fontFamily` | any installed family — monospace fonts look the most Matrix |
 | `fontFile` | absolute path to a `.ttf`/`.otf`; overrides `fontFamily` — the rain runs in *your* font |
 | `fontSizePx` | glyph size (cell width follows the widest glyph) |
-| `charset` | `katakana-latin` (default) \| `katakana` \| `latin` \| `digits`, or a literal string of ≥4 characters |
+| `charset` | `katakana` (default — katakana + machine symbols, no roman letters or digits) \| `katakana-latin` \| `latin` \| `digits`, or a literal string of ≥4 characters |
 | `colors.head` / `trail` | the bright lead glyph / the decaying trail |
 | `colors.blocked` / `blockedHead` | what a blocked PID rains |
 | `colors.label` | the PID digits |

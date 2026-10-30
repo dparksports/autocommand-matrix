@@ -56,6 +56,11 @@ namespace AutoCommand.Matrix
         public double Activity;
         public readonly List<RainDrop> Drops = new(4);
         public readonly List<WakeCell> Wake = new(32);
+        /// <summary>Fractional fall-step accumulators: rows/sec sits below
+        /// one row per frame at common rates (25/s at 60fps = 0.42 rows a
+        /// frame), and flooring that per frame floors it to ZERO forever —
+        /// the carry banks fractions and spends whole rows.</summary>
+        public double FallCarryTx, FallCarryRx;
         public int Slot;
         public int PrevSlot = -1;               // last frame's slot — re-slot compensation
         public double XOffset;                  // device-px slide toward 0 (entrance / re-rank glide)
@@ -587,13 +592,22 @@ namespace AutoCommand.Matrix
 
             if (!col.Exited)
             {
-                // Fall-speed ceiling, rows/sec, fractional: a slow cap can
-                // yield 0 for a frame — the letter budget simply banks and
-                // the head steps on the next frame. Default 25 = the
-                // original 50 halved ("twice slower falling").
-                StepDrops(col, (int)(dt * _cfg.FallRowsPerSecond), rx: false);
+                // Fall-speed ceiling, rows/sec, FRACTIONAL by accumulation:
+                // 25 rows/s at 60fps is 0.42 rows per frame — an integer
+                // cast of that is 0 every frame and the rain never falls.
+                // The carry banks fractions and spends whole rows.
+                col.FallCarryTx += dt * _cfg.FallRowsPerSecond;
+                int capTx = (int)col.FallCarryTx;
+                col.FallCarryTx -= capTx;
+                StepDrops(col, capTx, rx: false);
+
                 if (_cfg.RxMode)
-                    StepDrops(col, (int)(dt * _cfg.FallRowsPerSecond * 0.5), rx: true);
+                {
+                    col.FallCarryRx += dt * _cfg.FallRowsPerSecond * 0.5;
+                    int capRx = (int)col.FallCarryRx;
+                    col.FallCarryRx -= capRx;
+                    StepDrops(col, capRx, rx: true);
+                }
             }
         }
 

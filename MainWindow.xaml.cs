@@ -76,7 +76,7 @@ namespace AutoCommand.Matrix
             InitializeComponent();
             _cfg = cfg;
             _engine = engine;
-            _renderer = new MatrixRenderer(AmbientImage, RainImage, engine, cfg);
+            _renderer = new MatrixRenderer(AmbientImage, RainImage, () => engine.Latest, cfg);
 
             // Position before the first Show — a borderless transparent
             // window flashing at (0,0) before docking would be jarring.

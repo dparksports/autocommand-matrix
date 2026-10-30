@@ -98,7 +98,7 @@ namespace AutoCommand.Matrix
     {
         private readonly Image _image;
         private readonly Image _ambientImage;
-        private readonly MonitorEngine _engine;
+        private readonly Func<IReadOnlyList<PidSnapshot>> _latestSource;
         private readonly Random _rand = new();
 
         private MatrixRainConfig _cfg;
@@ -148,11 +148,11 @@ namespace AutoCommand.Matrix
 
         private bool _rainClearPending;   // full rain-layer reset (atlas rebuild, column retirement)
 
-        public MatrixRenderer(Image ambientImage, Image rainImage, MonitorEngine engine, MatrixRainConfig cfg)
+        public MatrixRenderer(Image ambientImage, Image rainImage, Func<IReadOnlyList<PidSnapshot>> latest, MatrixRainConfig cfg)
         {
             _ambientImage = ambientImage;
             _image = rainImage;
-            _engine = engine;
+            _latestSource = latest;
             _frameTimer.Tick += (s, e) => Frame(null, EventArgs.Empty);
             ApplyConfig(cfg);
         }
@@ -273,6 +273,31 @@ namespace AutoCommand.Matrix
                 Interval = TimeSpan.FromMilliseconds(15)
             };
 
+        public int LiveColumns => _columns.Count;
+        public double LastFps => _fpsEma;
+        public int SurfaceWidth => _w;
+        public int SurfaceHeight => _h;
+        public long DebugDraws;
+        public int DebugDrops;
+        public double DebugBudget;
+        private double _fpsEma;
+
+        public void DumpRainPng(string path)
+        {
+            if (_bmp == null) return;
+            try
+            {
+                var stride = _w * 4;
+                var buf = new byte[stride * _h];
+                _bmp.CopyPixels(buf, stride, 0);
+                var src = BitmapSource.Create(_w, _h, 96, 96, PixelFormats.Pbgra32, null, buf, stride);
+                var enc = new PngBitmapEncoder();
+                enc.Frames.Add(BitmapFrame.Create(src));
+                using var fs = System.IO.File.Create(path);
+                enc.Save(fs);
+            }
+            catch { }
+        }
         // ------------------------------------------------------------------
         // Frame
         // ------------------------------------------------------------------
@@ -290,6 +315,7 @@ namespace AutoCommand.Matrix
             if (dt < 1.0 / fps - 0.0005) return;
             _lastFrameSec = now;
             dt = Math.Clamp(dt, 0.001, 0.25);
+            _fpsEma = _fpsEma <= 0 ? 1.0 / dt : _fpsEma * 0.9 + (1.0 / dt) * 0.1;
 
             ConsumeSnapshot();
 
@@ -452,26 +478,42 @@ namespace AutoCommand.Matrix
                     continue;
                 }
 
-                // green where the head has crossed
+                // green where the head has crossed — each cell is CLEARED
+                // first: the previous pass's decayed glyph must not bleed
+                // through the new glyph's antialiased pixels (two letters
+                // in one cell is overwriting, not rain)
                 for (int r = Math.Max(0, prevRow + 1); r <= newRow && r < _gridRows; r++)
+                {
+                    int cy = _bandH + r * _atlas.CellH;
+                    ClearCell(dstBase, stride, x, cy, _atlas.CellW, _atlas.CellH, _w, _h);
                     BlitClipped(dstBase, stride, _atlas.Trail[_rand.Next(n)],
-                        _atlas.CellW, _atlas.CellH, x, _bandH + r * _atlas.CellH,
+                        _atlas.CellW, _atlas.CellH, x, cy,
                         _w, _h, (int)(256 * s.Brightness));
+                }
 
                 // the white tip
                 if (newRow >= 0 && newRow < _gridRows)
+                {
+                    int ty = _bandH + newRow * _atlas.CellH;
+                    ClearCell(dstBase, stride, x, ty, _atlas.CellW, _atlas.CellH, _w, _h);
                     BlitClipped(dstBase, stride, _atlas.Head[s.Glyph],
-                        _atlas.CellW, _atlas.CellH, x, _bandH + newRow * _atlas.CellH,
+                        _atlas.CellW, _atlas.CellH, x, ty,
                         _w, _h, 244);
+                    DebugDraws++;
+                }
 
                 // mid-trail mutation — the film's shimmer
                 if (newRow > 4 && _rand.NextDouble() < 0.12)
                 {
                     int mr = newRow - _rand.Next(1, Math.Min(16, newRow));
                     if (mr >= 0)
+                    {
+                        int my = _bandH + mr * _atlas.CellH;
+                        ClearCell(dstBase, stride, x, my, _atlas.CellW, _atlas.CellH, _w, _h);
                         BlitClipped(dstBase, stride, _atlas.Trail[_rand.Next(n)],
-                            _atlas.CellW, _atlas.CellH, x, _bandH + mr * _atlas.CellH,
+                            _atlas.CellW, _atlas.CellH, x, my,
                             _w, _h, (int)(256 * s.Brightness));
+                    }
                 }
             }
         }
@@ -505,20 +547,46 @@ namespace AutoCommand.Matrix
                     BlitClipped(dstBase, stride, bloom[d.GlyphIndex],
                         bw, bh, x + (cw - bw) / 2, y + (ch - bh) / 2, _w, _h, 256);
                 }
+                // clear the STANDARD cell before the sharp glyph: the lead
+                // must REPLACE the wall glyph under it, not blend with its
+                // ghost (clearing the larger lift rect would nick the
+                // neighboring cells' glyph edges)
+                ClearCell(dstBase, stride, ColumnX(col),
+                    _bandH + d.Row * _atlas.CellH, _atlas.CellW, _atlas.CellH, _w, _h);
                 BlitClipped(dstBase, stride, headSet[d.GlyphIndex], cw, ch, x, y, _w, _h, 256);
             }
         }
 
         /// <summary>A vacated data-lead row in cinema: bold green, full
-        /// strength — the data trail reads over the decorative wall.</summary>
+        /// strength — stamped into a CLEARED cell so it replaces the wall
+        /// glyph instead of superimposing on it.</summary>
         private unsafe void DrawGreenCell(RainColumn col, int row, int glyphIndex, int alpha)
         {
             if (row < 0 || row >= _gridRows) return;
             int x = ColumnX(col);
             if (x < 0) return;
-            BlitClipped((byte*)_bmp.BackBuffer, _bmp.BackBufferStride,
+            byte* dstBase = (byte*)_bmp.BackBuffer;
+            int stride = _bmp.BackBufferStride;
+            int y = _bandH + row * _atlas.CellH;
+            ClearCell(dstBase, stride, x, y, _atlas.CellW, _atlas.CellH, _w, _h);
+            BlitClipped(dstBase, stride,
                 _atlas.Trail[glyphIndex], _atlas.CellW, _atlas.CellH,
-                x, _bandH + row * _atlas.CellH, _w, _h, alpha);
+                x, y, _w, _h, alpha);
+        }
+
+        /// <summary>Zeroes a cell rect (clipped to the surface) — replacement
+        /// semantics for stamps on the ever-occupied cinema wall. Without it
+        /// the over-blend keeps a fraction of the previous glyph's
+        /// antialiased pixels: two letters in one cell.</summary>
+        private static unsafe void ClearCell(byte* dstBase, int stride, int x, int y, int w, int h, int maxW, int maxH)
+        {
+            int cw = Math.Min(w, maxW - x);
+            int ch = Math.Min(h, maxH - y);
+            if (cw <= 0 || ch <= 0) return;
+            byte* d = dstBase + y * stride + x * 4;
+            for (int r = 0; r < ch; r++, d += stride)
+                for (int c = 0; c < cw * 4; c++)
+                    d[c] = 0;
         }
 
         /// <summary>Writes this frame's wake into the backdrop: each cell a
@@ -652,7 +720,7 @@ namespace AutoCommand.Matrix
         /// immutable and counters absolute, so a skipped one loses nothing.</summary>
         private void ConsumeSnapshot()
         {
-            var snap = _engine.Latest;
+            var snap = _latestSource();
             if (ReferenceEquals(snap, _consumed)) return;
             _consumed = snap;
 

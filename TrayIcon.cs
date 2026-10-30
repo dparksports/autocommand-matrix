@@ -23,7 +23,7 @@ namespace AutoCommand.Matrix
         private readonly MainWindow _window;
         private IntPtr _hIcon = IntPtr.Zero;
         private readonly WinForms.ToolStripMenuItem _dockLeft, _dockRight, _dockFull, _dockManual;
-        private readonly WinForms.ToolStripMenuItem _clickThroughItem, _labelsItem, _rxItem, _desktopItem, _speedItem;
+        private readonly WinForms.ToolStripMenuItem _clickThroughItem, _labelsItem, _rxItem, _desktopItem, _speedItem, _styleItem;
         private DateTime _lastBalloonUtc = DateTime.MinValue;
 
         public TrayIcon(Func<MatrixRainConfig> cfg, MainWindow window)
@@ -69,6 +69,11 @@ namespace AutoCommand.Matrix
             menu.Items.Add(_speedItem);
             menu.Items.Add(Item("Fall slower", () => AdjustSpeed(0.75)));
             menu.Items.Add(Item("Fall faster", () => AdjustSpeed(4.0 / 3.0)));
+            menu.Items.Add(new WinForms.ToolStripSeparator());
+
+            _styleItem = Item("Movie look (cinema)", () => ToggleProp(c =>
+                c.Style = c.Style == "cinema" ? "instrument" : "cinema"));
+            menu.Items.Add(_styleItem);
             menu.Items.Add(new WinForms.ToolStripSeparator());
 
             menu.Items.Add(Item("Edit matrix_rain.json", EditConfig));
@@ -156,6 +161,7 @@ namespace AutoCommand.Matrix
             _rxItem.Checked = cfg.RxMode;
             _desktopItem.Checked = cfg.Surface == "desktop";
             _speedItem.Text = $"Fall speed: {cfg.FallRowsPerSecond:0.#} rows/s";
+            _styleItem.Checked = cfg.Style == "cinema";
         }
 
         /// <summary>Engine status → balloon, rate-limited so a flapping

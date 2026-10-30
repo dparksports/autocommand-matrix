@@ -99,6 +99,7 @@ font or colors while it's raining and watch it re-skin live.
 
 ```json
 {
+  "style": "cinema",
   "dock": "right",
   "surface": "desktop",
   "widthPx": 280,
@@ -134,6 +135,7 @@ font or colors while it's raining and watch it re-skin live.
 
 | Key | Meaning |
 |---|---|
+| `style` | `cinema` (default — the movie look: a decorative wall of independent green streams behind the data columns, white lead tips, bold glyphs, silky exponential trails) \| `instrument` (the original minimal look — dark glass, only real traffic rains, frozen backdrop) |
 | `dock` | `left` \| `right` (default) \| `full` (whole desktop — explicit) \| `manual` |
 | `surface` | `desktop` (default — rain over the wallpaper, **covered by application windows**) \| `overlay` (above everything) |
 | `widthPx` | side-dock pane width in DIPs |
@@ -163,6 +165,20 @@ font or colors while it's raining and watch it re-skin live.
 
 Blocked-state changes can lag the firewall by up to `blockPollSeconds`
 (same cadence as AutoCommand's own Process Monitor tab).
+
+## Two styles — `cinema` and `instrument`
+
+The original build rained only on real traffic — precise, but it didn't look
+like the film. `style: "cinema"` (the default) recreates the movie's wall:
+every column streams continuously at its own speed with a bright white tip,
+glyphs are bold and stacked tight, and the whole pane carries the classic
+silky green decay. The real telemetry rides **on top** of that wall — your
+live PID columns keep their bloom, wake trails, red blocked-glyphs and PID
+labels, so a busy process still visibly outshines the decoration around it.
+`style: "instrument"` switches back to the quiet original: nothing moves
+unless something transmits. Toggle it live from the tray
+(**Movie look (cinema)**), or set `style` in the JSON — the two styles share
+every other knob (font, colors, speed, charset).
 
 ## How the rain maps to reality
 

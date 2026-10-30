@@ -23,7 +23,7 @@
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Version>2026.10.30.3</Version>
+    <Version>2026.10.30.4</Version>
     <AssemblyName>AutoCommand.Matrix</AssemblyName>
     <Product>AutoCommand Matrix</Product>
     <ApplicationManifest>app.manifest</ApplicationManifest>

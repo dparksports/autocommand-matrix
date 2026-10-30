@@ -119,7 +119,7 @@ font or colors while it's raining and watch it re-skin live.
     "ambient": "#0E5C1F"
   },
   "lettersPerTransmit": 1.0,
-  "maxColumns": 64,
+  "maxColumns": 9,
   "blockPollSeconds": 60,
   "showLabels": true,
   "rxMode": false,
@@ -150,7 +150,7 @@ font or colors while it's raining and watch it re-skin live.
 | `colors.label` | the PID digits |
 | `colors.rx` | receive glyphs, when `rxMode` is on |
 | `lettersPerTransmit` | letters bought per TX packet; auto-scales down under heavy traffic so a busy PID streams fast instead of turning into a solid wall |
-| `maxColumns` | rain columns before the stalest PID gives up its slot |
+| `maxColumns` | hard cap on rain columns — the pane carries exactly one column per alive process, clamped 1–9 (never ten or more) |
 | `blockPollSeconds` | firewall block-inventory poll (red-mode freshness) |
 | `showLabels` | the vertical PID digits atop each column |
 | `rxMode` | also rain on receives |
